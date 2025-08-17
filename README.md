@@ -1,4 +1,7 @@
-[![Flutter CI](https://github.com/darcy0408/story_creator_app/actions/workflows/flutter.yml/badge.svg?branch=master)](https://github.com/darcy0408/story_creator_app/actions/workflows/flutter.yml)
+<p align="center">
+  <img src="docs/story_creator_app_banner.png" alt="Story Creator — AI-powered, cross-platform storytelling" width="100%">
+</p>
+
 
 Story Creator App
 
