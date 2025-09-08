@@ -7,9 +7,16 @@ import google.generativeai as genai
 from flask import Flask, request, jsonify
 import re
 import random
+from flask_cors import CORS
+# Simple in-memory storage for now (later we'll add database)
+stored_characters = {}
+from datetime import datetime
+import uuid
+import json
 
 # --- Flask App Initialization ---
 app = Flask(__name__)
+CORS(app)
 
 # --- API Key and Model Configuration ---
 API_KEY = os.getenv("GEMINI_API_KEY")
@@ -380,7 +387,95 @@ def get_story_themes():
         'Ocean': 'Deep sea adventures and aquatic friends'
     }
     return jsonify(themes)
+@app.route('/create-character', methods=['POST'])
+def create_character():
+    """Create a personalized character profile"""
+    data = request.json
+    
+    character_id = str(uuid.uuid4())
+    character = {
+        'id': character_id,
+        'name': data.get('name'),
+        'age': data.get('age'),
+        'gender': data.get('gender'),
+        'role': data.get('role'),  # superhero, princess, knight, etc.
+        'magic_type': data.get('magic_type'),  # fire, ice, nature, etc.
+        'challenge': data.get('challenge'),  # what they're working through
+        'personality_traits': data.get('traits', []),
+        'siblings': data.get('siblings', []),
+        'friends': data.get('friends', []),
+        'created_at': datetime.now().isoformat()
+    }
+    
+    # Store the character
+    stored_characters[character_id] = character
+    
+    return jsonify(character), 201
 
+@app.route('/get-characters', methods=['GET'])
+def get_characters():
+    """Get all saved characters"""
+    return jsonify(list(stored_characters.values())), 200
+
+@app.route('/generate-personalized-story', methods=['POST'])
+def generate_personalized_story():
+    """Generate story with custom characters"""
+    data = request.json
+    character_ids = data.get('character_ids', [])
+    theme = data.get('theme', 'Adventure')
+    
+    # Get the characters
+    characters = [stored_characters.get(cid) for cid in character_ids if cid in stored_characters]
+    
+    if not characters:
+        return jsonify({'error': 'No valid characters found'}), 400
+    
+    # Build the prompt with personalized details
+    main_char = characters[0]
+    
+    prompt = f"""
+    Create a therapeutic story for a {main_char['age']}-year-old child named {main_char['name']}.
+    
+    Main Character:
+    - Name: {main_char['name']}
+    - Role: {main_char['role']} 
+    - Special Power: {main_char['magic_type']} magic
+    - Working on: {main_char['challenge']}
+    
+    Additional Characters in the story:
+    {format_additional_characters(characters[1:])}
+    
+    Story Requirements:
+    - Age-appropriate for a {main_char['age']}-year-old
+    - Include healthy coping strategies for {main_char['challenge']}
+    - Show the character learning and growing
+    - Include their magic power in a meaningful way
+    - Make it engaging and therapeutic
+    - End with a positive resolution and wisdom
+    
+    Theme: {theme}
+    """
+    
+    # Generate the story
+    model = genai.GenerativeModel('gemini-pro')
+    response = model.generate_content(prompt)
+    
+    return jsonify({
+        'story': response.text,
+        'characters': characters,
+        'theme': theme
+    }), 200
+
+def format_additional_characters(characters):
+    """Helper function to format additional characters"""
+    if not characters:
+        return "No additional characters"
+    
+    formatted = []
+    for char in characters:
+        formatted.append(f"- {char['name']} ({char['role']}, {char['age']} years old)")
+    
+    return '\n'.join(formatted)
 if __name__ == '__main__':
     print("🌟 Enhanced Story Engine Starting...")
     print("✨ Now with advanced character development, plot structures, and companion dynamics!")
