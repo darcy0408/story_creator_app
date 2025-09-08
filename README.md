@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="docs/story_creator_app_banner.png" alt="Story Creator — AI-powered, cross-platform storytelling" width="100%">
+</p>
+
+
 Story Creator App
 
 AI-Powered, Cross-Platform Storytelling
