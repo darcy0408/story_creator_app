@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+import 'storage_service.dart';
 import 'story_result_screen.dart';
 import 'saved_stories_screen.dart';
-import 'storage_service.dart';
 import 'models.dart';
-import 'package:uuid/uuid.dart';
+import 'multi_character_screen.dart';
+import 'character_creation_screen.dart';
 
 class StoryCreatorApp extends StatelessWidget {
   const StoryCreatorApp({super.key});
@@ -33,8 +34,6 @@ class StoryScreen extends StatefulWidget {
 }
 
 class _StoryScreenState extends State<StoryScreen> {
-  final _uuid = const Uuid();
-
   List<Character> _characters = [];
   Character? _selectedCharacter;
 
@@ -42,7 +41,7 @@ class _StoryScreenState extends State<StoryScreen> {
   String _selectedCompanion = 'None';
   bool _isLoading = false;
 
-  final List<Map<String, String>> _companions = [
+  final List<Map<String, String>> _companions = const [
     {'name': 'None', 'image': 'assets/images/none.png'},
     {'name': 'Loyal Dog', 'image': 'assets/images/dog.png'},
     {'name': 'Mysterious Cat', 'image': 'assets/images/cat.png'},
@@ -60,44 +59,44 @@ class _StoryScreenState extends State<StoryScreen> {
   }
 
   Future<void> _loadCharacters() async {
-    final saved = await StorageService.getCharacters();
-    final fallbackNames = [
-      'Brave Knight',
-      'Wise Wizard',
-      'Friendly Dragon',
-      'Clever Fox',
-      'Kind Princess',
-    ];
-    final fallback = fallbackNames
-        .map((n) => Character(
-              id: _uuid.v4(),
-              name: n,
-              gender: 'Unknown',
-              age: 8,
-              hair: 'Brown',
-              eyes: 'Blue',
-            ))
-        .toList();
+    final url = Uri.parse('http://127.0.0.1:5000/get-characters');
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        // Accept either: [ ... ]  OR  { "items": [ ... ], "meta": {...} }
+        final List list = (decoded is List) ? decoded : (decoded['items'] as List);
+        final characters = list.map((j) => Character.fromJson(j)).toList().cast<Character>();
 
-    setState(() {
-      _characters = saved.isNotEmpty ? saved : fallback;
-      _selectedCharacter ??=
-          _characters.isNotEmpty ? _characters.first : null;
-    });
-
-    // If we used fallback, persist it once so it sticks on refresh
-    if (saved.isEmpty) {
-      await StorageService.setCharacters(_characters);
+        setState(() {
+          _characters = characters;
+          if (_characters.isNotEmpty) {
+            final stillExists = _characters.any((c) => c.id == _selectedCharacter?.id);
+            if (!stillExists) _selectedCharacter = _characters.first;
+          } else {
+            _selectedCharacter = null;
+          }
+        });
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to load characters (${response.statusCode}).')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error fetching characters.')),
+        );
+      }
     }
   }
 
-  Future<void> _saveCharacters() async {
-    await StorageService.setCharacters(_characters);
-  }
-
   Future<void> _createStory() async {
+    final navContext = context;
     if (_selectedCharacter == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(navContext).showSnackBar(
         const SnackBar(content: Text('Please choose a character!')),
       );
       return;
@@ -117,11 +116,25 @@ class _StoryScreenState extends State<StoryScreen> {
         }),
       );
 
-      if (!mounted) return;
+      if (!navContext.mounted) return;
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
-        Navigator.of(context).push(
+
+        // Save the story locally with which kid was used
+        final saved = SavedStory(
+          title: (data['title'] ?? 'Your Story') as String,
+          storyText: (data['story_text'] ?? '') as String,
+          theme: _selectedTheme,
+          characters: _selectedCharacter != null ? [_selectedCharacter!] : <Character>[],
+          createdAt: DateTime.now(),
+        );
+        await StorageService().saveStory(saved);
+
+        if (!navContext.mounted) return;
+
+        // Navigate to result screen
+        Navigator.of(navContext).push(
           MaterialPageRoute(
             builder: (_) => StoryResultScreen(
               title: (data['title'] ?? 'Your Story') as String,
@@ -131,117 +144,17 @@ class _StoryScreenState extends State<StoryScreen> {
           ),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Error: Could not get a story from the server.')),
+        ScaffoldMessenger.of(navContext).showSnackBar(
+          const SnackBar(content: Text('Error: Could not get a story from the server.')),
         );
       }
     } catch (_) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Network Error: Could not connect to the server.')),
+      ScaffoldMessenger.of(navContext).showSnackBar(
+        const SnackBar(content: Text('Network Error: Could not connect to the server.')),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _showAddCharacterDialog() {
-    String name = '';
-    String gender = 'Girl';
-    int age = 8;
-    String hair = 'Brown';
-    String eyes = 'Blue';
-
-    showDialog(
-      context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          title: const Text('Add New Character'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  decoration:
-                      const InputDecoration(labelText: "Name (required)"),
-                  autofocus: true,
-                  onChanged: (v) => setLocal(() => name = v),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: gender,
-                  decoration: const InputDecoration(labelText: 'Gender'),
-                  items: const [
-                    DropdownMenuItem(value: 'Girl', child: Text('Girl')),
-                    DropdownMenuItem(value: 'Boy', child: Text('Boy')),
-                    DropdownMenuItem(value: 'Other', child: Text('Other')),
-                    DropdownMenuItem(
-                        value: 'Unknown', child: Text('Prefer not to say')),
-                  ],
-                  onChanged: (v) => setLocal(() => gender = v ?? gender),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  initialValue: '$age',
-                  decoration: const InputDecoration(labelText: 'Age'),
-                  keyboardType: TextInputType.number,
-                  onChanged: (v) {
-                    final parsed = int.tryParse(v);
-                    setLocal(() => age = (parsed == null || parsed < 0) ? 0 : parsed);
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  initialValue: hair,
-                  decoration: const InputDecoration(labelText: 'Hair color'),
-                  onChanged: (v) => setLocal(() => hair = v),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  initialValue: eyes,
-                  decoration: const InputDecoration(labelText: 'Eye color'),
-                  onChanged: (v) => setLocal(() => eyes = v),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final n = name.trim();
-                if (n.isEmpty) return; // simple guard
-                final exists = _characters.any(
-                    (c) => c.name.toLowerCase() == n.toLowerCase());
-                if (exists) {
-                  Navigator.of(context).pop();
-                  return;
-                }
-                setState(() {
-                  final c = Character(
-                    id: _uuid.v4(),
-                    name: n,
-                    gender: gender,
-                    age: age,
-                    hair: hair,
-                    eyes: eyes,
-                  );
-                  _characters.add(c);
-                  _selectedCharacter = c;
-                });
-                _saveCharacters();
-                Navigator.of(context).pop();
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -249,8 +162,6 @@ class _StoryScreenState extends State<StoryScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Story Creator'),
-        backgroundColor: Colors.deepPurple,
-        elevation: 4,
         actions: [
           IconButton(
             tooltip: 'My stories',
@@ -258,6 +169,15 @@ class _StoryScreenState extends State<StoryScreen> {
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const SavedStoriesScreen()),
+              );
+            },
+          ),
+          IconButton(
+            tooltip: 'Group Story',
+            icon: const Icon(Icons.groups),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MultiCharacterScreen()),
               );
             },
           ),
@@ -279,10 +199,8 @@ class _StoryScreenState extends State<StoryScreen> {
                 : ElevatedButton(
                     onPressed: _createStory,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      textStyle: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold),
+                      textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     child: const Text('Create My Story!'),
                   ),
@@ -301,8 +219,7 @@ class _StoryScreenState extends State<StoryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             content,
           ],
@@ -322,12 +239,16 @@ class _StoryScreenState extends State<StoryScreen> {
               onSelected: (isSelected) {
                 setState(() => _selectedCharacter = isSelected ? c : null);
               },
-              selectedColor: Colors.deepPurple.shade100,
             )),
         IconButton(
           icon: const Icon(Icons.add_circle, color: Colors.deepPurple),
-          onPressed: _showAddCharacterDialog,
           tooltip: 'Add character',
+          onPressed: () async {
+            await Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const CharacterCreationScreen()),
+            );
+            _loadCharacters();
+          },
         ),
       ],
     );
@@ -349,7 +270,6 @@ class _StoryScreenState extends State<StoryScreen> {
                     if (isSelected) _selectedTheme = theme;
                   });
                 },
-                selectedColor: Colors.deepPurple.shade100,
               ))
           .toList(),
     );

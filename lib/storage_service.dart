@@ -1,37 +1,75 @@
-// lib/storage_service.dart
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'models.dart';
 
+/// Local persistence for stories (v2).
+/// Stores a JSON array of SavedStory objects under the key [_kStoriesV2].
 class StorageService {
-  // Old key for names-only (kept for compatibility)
-  static const _namesKey = 'character_names';
-  // New key for full objects
-  static const _charactersKey = 'characters_v1';
+  static const String _kStoriesV2 = 'saved_stories_v2';
 
-  /// -------- Names-only (legacy) ----------
-  static Future<List<String>> getCharacterNames() async {
+  /// Load all saved stories (new v2 format). Also migrates legacy v1 if found.
+  Future<List<SavedStory>> loadStories() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList(_namesKey) ?? <String>[];
+
+    // Try v2 first
+    final v2Raw = prefs.getString(_kStoriesV2);
+    if (v2Raw != null && v2Raw.isNotEmpty) {
+      final list = (jsonDecode(v2Raw) as List)
+          .map((e) => SavedStory.fromJson(e as Map<String, dynamic>))
+          .toList();
+      return list;
+    }
+
+    // No v2 found: migrate older plain text list if you had one in the past (optional).
+    // If you never stored legacy stories, you can remove this whole migration block.
+    // Example of a legacy key:
+    // final legacy = prefs.getStringList('saved_stories');
+    // if (legacy != null && legacy.isNotEmpty) {
+    //   final migrated = legacy.map((text) {
+    //     return SavedStory(
+    //       title: 'Saved Story',
+    //       storyText: text,
+    //       theme: 'Adventure',
+    //       characters: const <Character>[],
+    //       createdAt: DateTime.now(),
+    //     );
+    //   }).toList();
+    //   await _saveAll(migrated);
+    //   await prefs.remove('saved_stories');
+    //   return migrated;
+    // }
+
+    return <SavedStory>[];
   }
 
-  static Future<void> setCharacterNames(List<String> names) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_namesKey, names);
+  /// Save (append) one story.
+  Future<void> saveStory(SavedStory story) async {
+    final list = await loadStories();
+    list.insert(0, story); // newest first
+    await _saveAll(list);
   }
 
-  /// -------- Full objects ----------
-  static Future<List<Character>> getCharacters() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_charactersKey);
-    if (raw == null || raw.isEmpty) return [];
-    final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
-    return list.map(Character.fromJson).toList();
+  /// Delete story by index (as shown in UI list).
+  Future<void> deleteStoryAt(int index) async {
+    final list = await loadStories();
+    if (index < 0 || index >= list.length) return;
+    list.removeAt(index);
+    await _saveAll(list);
   }
 
-  static Future<void> setCharacters(List<Character> items) async {
+  /// Clear all stories (optional – not used by default UI).
+  Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
-    final jsonList = items.map((c) => c.toJson()).toList();
-    await prefs.setString(_charactersKey, jsonEncode(jsonList));
+    await prefs.remove(_kStoriesV2);
+  }
+
+  // -----------------------------
+  // Internal helpers
+  // -----------------------------
+  Future<void> _saveAll(List<SavedStory> list) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = jsonEncode(list.map((e) => e.toJson()).toList());
+    await prefs.setString(_kStoriesV2, raw);
   }
 }

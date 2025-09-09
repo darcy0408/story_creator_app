@@ -1,482 +1,430 @@
-# Enhanced Interactive Children's Adventure Engine - API Version 2.0
-# This script includes advanced story generation with character development,
-# plot twists, multiple story structures, and dynamic narrative elements.
+"""
+Enhanced Interactive Children's Adventure Engine – API v2.0 (Refactor)
+- Bug fixes, safer parsing, better validation, and small DX upgrades.
+"""
 
 import os
-import google.generativeai as genai
-from flask import Flask, request, jsonify
-import re
-import random
-from flask_cors import CORS
-# Simple in-memory storage for now (later we'll add database)
-stored_characters = {}
-from datetime import datetime
 import uuid
 import json
+import logging
+import random
+import re
+from datetime import datetime
 
-# --- Flask App Initialization ---
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+import google.generativeai as genai
+from sqlalchemy import Index
+from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
+
+# ----------------------
+# Flask & DB setup
+# ----------------------
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
-# --- API Key and Model Configuration ---
-API_KEY = os.getenv("GEMINI_API_KEY")
-if not API_KEY:
-    API_KEY = input("Please paste your Google AI API Key and press Enter: ")
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(basedir, 'characters.db')}"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["JSON_SORT_KEYS"] = False  # keep response order predictable
 
-genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+db = SQLAlchemy(app)
 
-# --- Advanced Story Engine Classes ---
-class CharacterTraits:
-    """Defines personality traits and characteristics for story characters"""
-    
-    PERSONALITY_TRAITS = {
-        'Brave Knight': {
-            'core_traits': ['courageous', 'noble', 'protective'],
-            'quirks': ['always polishes armor', 'talks to their horse', 'afraid of spiders'],
-            'motivation': 'to protect the innocent and uphold justice',
-            'speaking_style': 'formal and chivalrous'
-        },
-        'Wise Wizard': {
-            'core_traits': ['intelligent', 'mysterious', 'patient'],
-            'quirks': ['forgets where they put their hat', 'talks in riddles', 'loves tea ceremonies'],
-            'motivation': 'to preserve ancient knowledge and guide others',
-            'speaking_style': 'cryptic but kind'
-        },
-        'Friendly Dragon': {
-            'core_traits': ['gentle', 'misunderstood', 'loyal'],
-            'quirks': ['collects shiny pebbles', 'sneezes rainbow sparks', 'loves to garden'],
-            'motivation': 'to prove dragons can be friends, not foes',
-            'speaking_style': 'warm and enthusiastic'
-        },
-        'Clever Fox': {
-            'core_traits': ['cunning', 'resourceful', 'quick-witted'],
-            'quirks': ['always has a backup plan', 'loves wordplay', 'hoards useful trinkets'],
-            'motivation': 'to outsmart challenges and help friends',
-            'speaking_style': 'playful and clever'
-        },
-        'Kind Princess': {
-            'core_traits': ['compassionate', 'diplomatic', 'brave'],
-            'quirks': ['talks to animals', 'always shares her food', 'keeps a diary'],
-            'motivation': 'to bring peace and happiness to her kingdom',
-            'speaking_style': 'gracious and encouraging'
+# ----------------------
+# Logging
+# ----------------------
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("story_engine")
+
+# ----------------------
+# Database model
+# ----------------------
+class Character(db.Model):
+    """Stores character information, traits, relationships, and metadata."""
+
+    id = db.Column(db.String(36), primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    age = db.Column(db.Integer, nullable=False)
+    gender = db.Column(db.String(50))
+    role = db.Column(db.String(50))
+    magic_type = db.Column(db.String(50))
+    challenge = db.Column(db.Text)
+
+    # SQLite JSON (persists as TEXT underneath)
+    personality_traits = db.Column(SQLITE_JSON, default=list)
+    siblings = db.Column(SQLITE_JSON, default=list)
+    friends = db.Column(SQLITE_JSON, default=list)
+    likes = db.Column(SQLITE_JSON, default=list)
+    dislikes = db.Column(SQLITE_JSON, default=list)
+    fears = db.Column(SQLITE_JSON, default=list)
+
+    comfort_item = db.Column(db.String(200))
+    created_at = db.Column(db.DateTime, default=datetime.now, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "age": self.age,
+            "gender": self.gender,
+            "role": self.role,
+            "magic_type": self.magic_type,
+            "challenge": self.challenge,
+            "personality_traits": self.personality_traits or [],
+            "siblings": self.siblings or [],
+            "friends": self.friends or [],
+            "likes": self.likes or [],
+            "dislikes": self.dislikes or [],
+            "fears": self.fears or [],
+            "comfort_item": self.comfort_item,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
-    }
-    
-    @classmethod
-    def get_traits(cls, character_name):
-        """Get character traits, with defaults for custom characters"""
-        if character_name in cls.PERSONALITY_TRAITS:
-            return cls.PERSONALITY_TRAITS[character_name]
-        else:
-            # Generate generic positive traits for custom characters
-            return {
-                'core_traits': ['determined', 'kind', 'adventurous'],
-                'quirks': ['has a lucky charm', 'always helps others', 'loves to explore'],
-                'motivation': 'to make the world a better place',
-                'speaking_style': 'friendly and optimistic'
-            }
 
+    def get_name_and_role(self):
+        return {"name": self.name, "role": self.role}
+
+
+Index("ix_character_created_at", Character.created_at)
+
+with app.app_context():
+    db.create_all()
+
+# ----------------------
+# Gemini setup
+# ----------------------
+api_key = os.getenv("GEMINI_API_KEY")
+if not api_key:
+    logger.warning("GEMINI_API_KEY not set. Generation endpoints will use fallbacks.")
+else:
+    genai.configure(api_key=api_key)
+
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+
+try:
+    model = genai.GenerativeModel(GEMINI_MODEL) if api_key else None
+except Exception as e:
+    logger.exception("Failed to initialize Gemini model: %s", e)
+    model = None
+
+# ----------------------
+# Story components
+# ----------------------
 class StoryStructures:
-    """Defines different story arc templates"""
-    
     ADVENTURE_TEMPLATES = [
-        {
-            'name': 'The Quest',
-            'structure': 'Hero receives a mission → Faces obstacles → Discovers inner strength → Achieves goal',
-            'key_elements': ['mysterious quest giver', 'magical item', 'guardian challenge', 'transformation']
-        },
-        {
-            'name': 'The Discovery',
-            'structure': 'Hero finds something unusual → Investigates mystery → Uncovers truth → Shares wisdom',
-            'key_elements': ['hidden secret', 'ancient clues', 'unexpected ally', 'revelation']
-        },
-        {
-            'name': 'The Friendship',
-            'structure': 'Hero meets someone different → Overcomes prejudice → Works together → Forms lasting bond',
-            'key_elements': ['misunderstanding', 'common goal', 'trust building', 'celebration']
-        },
-        {
-            'name': 'The Challenge',
-            'structure': 'Hero faces problem → Tries and fails → Learns new approach → Succeeds through wisdom',
-            'key_elements': ['initial failure', 'mentor advice', 'creative solution', 'personal growth']
-        }
+        {"name": "The Quest", "structure": "Hero receives mission -> Faces obstacles -> Finds strength -> Achieves goal"},
+        {"name": "The Discovery", "structure": "Hero finds something unusual -> Investigates -> Uncovers truth -> Shares wisdom"},
+        {"name": "The Friendship", "structure": "Hero meets someone different -> Overcomes prejudice -> Works together -> Lasting bond"},
     ]
-    
     PLOT_TWISTS = [
         "The villain turns out to be under a spell and needs help",
         "The treasure they seek was inside them all along",
-        "Their companion reveals a magical secret about themselves",
-        "The problem solves itself when they stop trying to force it",
+        "Their companion reveals a magical secret",
         "A tiny creature provides the most important help",
-        "The answer comes from an unexpected place they passed earlier",
-        "What seemed like an obstacle becomes the key to success",
-        "A past kindness returns to help them in their hour of need"
     ]
-    
+
     @classmethod
-    def get_random_structure(cls, theme):
-        """Select appropriate story structure based on theme"""
-        if theme.lower() in ['friendship', 'kindness']:
-            return random.choice([t for t in cls.ADVENTURE_TEMPLATES if t['name'] == 'The Friendship'])
-        elif theme.lower() in ['magic', 'mystery']:
-            return random.choice([t for t in cls.ADVENTURE_TEMPLATES if t['name'] == 'The Discovery'])
-        else:
-            return random.choice(cls.ADVENTURE_TEMPLATES)
+    def get_random_structure(cls, theme: str | None = None):
+        if theme:
+            t = theme.lower()
+            if "friend" in t:
+                return next((s for s in cls.ADVENTURE_TEMPLATES if s["name"] == "The Friendship"), random.choice(cls.ADVENTURE_TEMPLATES))
+            if any(x in t for x in ["discover", "mystery", "secret"]):
+                return next((s for s in cls.ADVENTURE_TEMPLATES if s["name"] == "The Discovery"), random.choice(cls.ADVENTURE_TEMPLATES))
+        return random.choice(cls.ADVENTURE_TEMPLATES)
 
 class CompanionDynamics:
-    """Defines how companions interact and contribute to stories"""
-    
     COMPANION_ROLES = {
-        'Loyal Dog': {
-            'abilities': ['amazing sense of smell', 'unwavering loyalty', 'protective instincts'],
-            'personality': 'enthusiastic and brave',
-            'contribution': 'sniffs out clues and warns of danger'
-        },
-        'Mysterious Cat': {
-            'abilities': ['sees in the dark', 'silent movement', 'mystical intuition'],
-            'personality': 'independent but caring',
-            'contribution': 'guides through dark places and senses magic'
-        },
-        'Mischievous Fairy': {
-            'abilities': ['flight', 'tiny size', 'nature magic'],
-            'personality': 'playful but helpful',
-            'contribution': 'unlocks small spaces and talks to woodland creatures'
-        },
-        'Tiny Dragon': {
-            'abilities': ['fire breathing', 'flight', 'ancient knowledge'],
-            'personality': 'proud but gentle',
-            'contribution': 'provides aerial view and dragon wisdom'
-        },
-        'Wise Owl': {
-            'abilities': ['night vision', 'ancient knowledge', 'patient observation'],
-            'personality': 'thoughtful and scholarly',
-            'contribution': 'offers sage advice and notices important details'
-        },
-        'Gallant Horse': {
-            'abilities': ['speed', 'strength', 'sure footing'],
-            'personality': 'noble and dependable',
-            'contribution': 'carries hero swiftly and stands guard'
-        },
-        'Robot Sidekick': {
-            'abilities': ['data analysis', 'problem solving', 'gadgets'],
-            'personality': 'logical but learning about friendship',
-            'contribution': 'calculates solutions and provides helpful tools'
-        }
+        "Loyal Dog": {"contribution": "sniffs out clues and warns of danger"},
+        "Mysterious Cat": {"contribution": "guides through dark places and senses magic"},
+        "Mischievous Fairy": {"contribution": "unlocks small spaces and talks to creatures"},
+        "Tiny Dragon": {"contribution": "provides aerial view and dragon wisdom"},
     }
-    
     @classmethod
-    def get_companion_info(cls, companion_name):
-        """Get companion abilities and personality"""
-        return cls.COMPANION_ROLES.get(companion_name, {
-            'abilities': ['helpfulness', 'loyalty', 'good heart'],
-            'personality': 'kind and supportive',
-            'contribution': 'provides emotional support and encouragement'
-        })
+    def get_companion_info(cls, companion_name: str | None):
+        if not companion_name:
+            return None
+        return cls.COMPANION_ROLES.get(companion_name, {"contribution": "provides emotional support"})
 
 class WisdomGems:
-    """Collection of meaningful life lessons for children"""
-    
     THEME_WISDOM = {
-        'Adventure': [
-            "The greatest adventures begin with a single brave step",
-            "Courage isn't the absence of fear, but acting despite it",
-            "Every challenge is a chance to discover your strength"
-        ],
-        'Friendship': [
-            "True friends accept you exactly as you are",
-            "The best way to have a friend is to be one",
-            "Friendship makes every adventure better"
-        ],
-        'Magic': [
-            "Real magic comes from believing in yourself",
-            "The most powerful magic is kindness",
-            "Magic surrounds us when we keep our hearts open"
-        ],
-        'Dragons': [
-            "Sometimes the scariest things turn out to be the most wonderful",
-            "Don't judge others by their appearance",
-            "Every creature has a story worth knowing"
-        ],
-        'Castles': [
-            "Home is wherever you feel loved and safe",
-            "The strongest castles are built on foundations of trust",
-            "Every person's heart is their own special castle"
-        ],
-        'Unicorns': [
-            "Purity of heart sees beauty everywhere",
-            "Believe in magic and you'll find it",
-            "Innocence is a strength, not a weakness"
-        ],
-        'Space': [
-            "The universe is vast, but you have a special place in it",
-            "Exploration begins with curiosity",
-            "Even the smallest star can light up the darkness"
-        ],
-        'Ocean': [
-            "Like the ocean, your potential is boundless",
-            "Sometimes you must dive deep to find treasure",
-            "Every wave that crashes returns to the sea stronger"
-        ]
+        "Adventure": ["The greatest adventures begin with a single brave step"],
+        "Friendship": ["True friends accept you exactly as you are"],
+        "Magic": ["Real magic comes from believing in yourself"],
     }
-    
     @classmethod
-    def get_wisdom(cls, theme):
-        """Get appropriate wisdom gem for the theme"""
-        theme_wisdom = cls.THEME_WISDOM.get(theme, cls.THEME_WISDOM['Adventure'])
-        return random.choice(theme_wisdom)
+    def get_wisdom(cls, theme: str | None):
+        return random.choice(cls.THEME_WISDOM.get(theme, cls.THEME_WISDOM["Adventure"]))
 
 class AdvancedStoryEngine:
-    """Main engine that orchestrates advanced story generation"""
-    
     def __init__(self):
-        self.character_traits = CharacterTraits()
         self.story_structures = StoryStructures()
         self.companion_dynamics = CompanionDynamics()
         self.wisdom_gems = WisdomGems()
-    
-    def generate_enhanced_prompt(self, character, theme, companion):
-        """Creates a sophisticated, multi-layered prompt for story generation"""
-        
-        # Get character details
-        char_traits = self.character_traits.get_traits(character)
-        
-        # Get story structure
-        story_structure = self.story_structures.get_random_structure(theme)
-        
-        # Get companion info
-        companion_info = self.companion_dynamics.get_companion_info(companion) if companion != 'None' else None
-        
-        # Select a plot twist
-        plot_twist = random.choice(self.story_structures.PLOT_TWISTS)
-        
-        # Get thematic wisdom
-        wisdom = self.wisdom_gems.get_wisdom(theme)
-        
-        # Build the enhanced prompt
-        prompt = f"""
-        You are a master storyteller creating an enchanting tale for children. Write a complete story with rich details and character development.
-        
-        STORY DETAILS:
-        - Main Character: {character}
-        - Character Traits: {', '.join(char_traits['core_traits'])}
-        - Character Quirk: {random.choice(char_traits['quirks'])}
-        - Character Motivation: {char_traits['motivation']}
-        - Speaking Style: {char_traits['speaking_style']}
-        - Theme: {theme}
-        - Story Structure: {story_structure['structure']}
-        - Key Elements to Include: {', '.join(story_structure['key_elements'])}
-        """
-        
-        if companion_info:
-            prompt += f"""
-        - Companion: {companion}
-        - Companion Abilities: {', '.join(companion_info['abilities'])}
-        - Companion Personality: {companion_info['personality']}
-        - How Companion Helps: {companion_info['contribution']}
-        """
-        
-        prompt += f"""
-        
-        NARRATIVE REQUIREMENTS:
-        1. Start with an engaging opening that introduces {character} in their world
-        2. Show the character's personality through actions and dialogue
-        3. Include a meaningful challenge that requires growth
-        4. Incorporate this plot element naturally: {plot_twist}
-        5. Show how the character changes or learns through the adventure
-        6. End with a satisfying resolution that demonstrates the lesson learned
-        7. Weave in moments of wonder, friendship, and discovery
-        8. Keep language age-appropriate but rich and engaging
-        9. Include sensory details (what characters see, hear, feel)
-        10. Show character emotions and internal thoughts
-        
-        STORY LENGTH: Approximately 500-600 words
-        
-        FORMAT REQUIREMENTS:
-        - Start with: [TITLE: A Creative and Engaging Title]
-        - End with: [WISDOM GEM: {wisdom}]
-        - Write in third person narrative
-        - Include dialogue to bring characters to life
-        - Use descriptive language that paints vivid pictures
-        
-        Create a story that children will remember and treasure, full of imagination, heart, and the magic of storytelling.
-        """
-        
-        return prompt.strip()
 
-# --- Enhanced API Endpoint ---
+    def generate_enhanced_prompt(self, character: str, theme: str, companion: str | None):
+        story_structure = self.story_structures.get_random_structure(theme)
+        companion_info = self.companion_dynamics.get_companion_info(companion)
+        plot_twist = random.choice(self.story_structures.PLOT_TWISTS)
+        wisdom = self.wisdom_gems.get_wisdom(theme)
+        parts = [
+            "You are a master storyteller creating an enchanting tale for children.",
+            "\nSTORY DETAILS:",
+            f"- Main Character: {character}",
+            f"- Theme: {theme}",
+            f"- Story Structure: {story_structure['structure']}",
+        ]
+        if companion_info:
+            parts.extend([
+                f"- Companion: {companion}",
+                f"- How Companion Helps: {companion_info['contribution']}",
+            ])
+        parts.extend([
+            "\nNARRATIVE REQUIREMENTS:",
+            f"1. Start with an engaging opening that introduces {character}.",
+            f"2. Incorporate this plot element naturally: {plot_twist}.",
+            "3. End with a satisfying resolution.",
+            "\nSTORY LENGTH: Approximately 500-600 words.",
+            "\nFORMAT REQUIREMENTS:",
+            "- Start with: [TITLE: A Creative and Engaging Title]",
+            f"- End with: [WISDOM GEM: {wisdom}]",
+        ])
+        return "\n".join(parts)
+
 story_engine = AdvancedStoryEngine()
 
-@app.route('/generate-story', methods=['POST'])
-def generate_story_endpoint():
-    """Enhanced endpoint that generates sophisticated stories"""
-    
-    try:
-        # Get request data
-        request_data = request.get_json()
-        character = request_data.get('character', 'a brave adventurer')
-        theme = request_data.get('theme', 'Adventure')
-        companion = request_data.get('companion', 'None')
-        
-        # Generate enhanced prompt
-        enhanced_prompt = story_engine.generate_enhanced_prompt(character, theme, companion)
-        
-        # Generate story with AI
-        response = model.generate_content(enhanced_prompt)
-        raw_text = response.text
-        
-        # Parse response
-        title_match = re.search(r'\[TITLE: (.*?)\]', raw_text, re.DOTALL)
-        gem_match = re.search(r'\[WISDOM GEM: (.*?)\]', raw_text, re.DOTALL)
-        
-        title = title_match.group(1).strip() if title_match else f"The Adventure of {character}"
-        wisdom_gem = gem_match.group(1).strip() if gem_match else WisdomGems.get_wisdom(theme)
-        
-        # Clean story text
-        story_text = re.sub(r'\[TITLE: .*?\]\s*', '', raw_text, flags=re.DOTALL)
-        story_text = re.sub(r'\[WISDOM GEM: .*?\]', '', story_text, flags=re.DOTALL).strip()
-        
-        # Ensure story isn't empty
-        if not story_text or len(story_text) < 100:
-            story_text = f"Once upon a time, {character} embarked on a wonderful {theme.lower()} that would change their life forever..."
-        
-        return jsonify({
-            'status': 'success',
-            'title': title,
-            'story_text': story_text,
-            'wisdom_gem': wisdom_gem,
-            'character_used': character,
-            'theme_used': theme,
-            'companion_used': companion
-        })
-        
-    except Exception as e:
-        print(f"Error generating story: {e}")
-        
-        # Fallback response
-        fallback_wisdom = WisdomGems.get_wisdom(request_data.get('theme', 'Adventure'))
-        return jsonify({
-            'status': 'success',
-            'title': f"The Adventure of {request_data.get('character', 'Our Hero')}",
-            'story_text': f"Once upon a time, {request_data.get('character', 'a brave hero')} discovered that the greatest adventures come from facing our fears with courage and kindness. Through their journey, they learned that true strength comes from helping others and believing in yourself.",
-            'wisdom_gem': fallback_wisdom,
-            'character_used': request_data.get('character', 'Hero'),
-            'theme_used': request_data.get('theme', 'Adventure'),
-            'companion_used': request_data.get('companion', 'None')
-        }), 200
+# ----------------------
+# Helpers
+# ----------------------
+_TITLE_RE = re.compile(r"\[TITLE:\s*(.*?)\s*\]", re.DOTALL)
+_GEM_RE = re.compile(r"\[WISDOM GEM:\s*(.*?)\s*\]", re.DOTALL)
 
-# --- Additional API Endpoints for Future Features ---
+def _safe_extract_title_and_gem(text: str, theme: str):
+    title_match = _TITLE_RE.search(text or "")
+    gem_match = _GEM_RE.search(text or "")
+    title = title_match.group(1).strip() if title_match and title_match.group(1).strip() else "A Brave Little Adventure"
+    wisdom_gem = gem_match.group(1).strip() if gem_match and gem_match.group(1).strip() else WisdomGems.get_wisdom(theme)
+    story_body = _TITLE_RE.sub("", text or "").strip()
+    story_body = _GEM_RE.sub("", story_body).strip()
+    return title, wisdom_gem, story_body
 
-@app.route('/get-character-traits/<character_name>', methods=['GET'])
-def get_character_traits(character_name):
-    """Endpoint to get character traits for the Flutter app"""
-    traits = CharacterTraits.get_traits(character_name)
-    return jsonify(traits)
+def _as_list(v):
+    """Accept list, JSON string, comma string, or None; return list[str]."""
+    if isinstance(v, list):
+        return v
+    if v in (None, "", []):
+        return []
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return []
+        if s.startswith("[") and s.endswith("]"):
+            try:
+                parsed = json.loads(s)
+                return parsed if isinstance(parsed, list) else [s]
+            except Exception:
+                pass
+        return [part.strip() for part in s.split(",") if part.strip()]
+    return [str(v)]
 
-@app.route('/get-story-themes', methods=['GET'])
+# ----------------------
+# API Routes
+# ----------------------
+@app.route("/health", methods=["GET"])
+def health():
+    return {"status": "ok", "model": GEMINI_MODEL, "has_api_key": bool(api_key)}, 200
+
+@app.route("/get-story-themes", methods=["GET"])
 def get_story_themes():
-    """Endpoint to get available themes and their descriptions"""
-    themes = {
-        'Adventure': 'Brave quests and exciting journeys',
-        'Friendship': 'Stories about making friends and working together',
-        'Magic': 'Mystical tales full of wonder and enchantment',
-        'Dragons': 'Adventures with magnificent dragons',
-        'Castles': 'Royal tales of kingdoms and noble deeds',
-        'Unicorns': 'Pure and magical stories of wonder',
-        'Space': 'Cosmic adventures among the stars',
-        'Ocean': 'Deep sea adventures and aquatic friends'
-    }
-    return jsonify(themes)
-@app.route('/create-character', methods=['POST'])
+    """Small helper for your UI to list themes."""
+    return jsonify(["Adventure", "Friendship", "Magic", "Dragons", "Castles", "Unicorns", "Space", "Ocean"]), 200
+
+@app.route("/generate-story", methods=["POST"])
+def generate_story_endpoint():
+    payload = request.get_json(silent=True) or {}
+    character = payload.get("character", "a brave adventurer")
+    theme = payload.get("theme", "Adventure")
+    companion = payload.get("companion")
+
+    prompt = story_engine.generate_enhanced_prompt(character, theme, companion)
+    try:
+        if model is None:
+            raise RuntimeError("Model unavailable")
+        response = model.generate_content(prompt)
+        raw_text = getattr(response, "text", "")
+        if not raw_text:
+            raise ValueError("Empty model response")
+    except Exception as e:
+        logger.warning("Model error, using fallback: %s", e)
+        raw_text = (
+            "[TITLE: An Unexpected Adventure]\n"
+            "Once upon a time, a brave hero discovered that the greatest adventures come from "
+            "facing our fears with courage and kindness.\n"
+            f"[WISDOM GEM: {WisdomGems.get_wisdom(theme)}]"
+        )
+    title, wisdom_gem, story_text = _safe_extract_title_and_gem(raw_text, theme)
+    return jsonify({"title": title, "story_text": story_text, "wisdom_gem": wisdom_gem}), 200
+
+@app.route("/create-character", methods=["POST"])
 def create_character():
-    """Create a personalized character profile"""
-    data = request.json
-    
-    character_id = str(uuid.uuid4())
-    character = {
-        'id': character_id,
-        'name': data.get('name'),
-        'age': data.get('age'),
-        'gender': data.get('gender'),
-        'role': data.get('role'),  # superhero, princess, knight, etc.
-        'magic_type': data.get('magic_type'),  # fire, ice, nature, etc.
-        'challenge': data.get('challenge'),  # what they're working through
-        'personality_traits': data.get('traits', []),
-        'siblings': data.get('siblings', []),
-        'friends': data.get('friends', []),
-        'created_at': datetime.now().isoformat()
-    }
-    
-    # Store the character
-    stored_characters[character_id] = character
-    
-    return jsonify(character), 201
+    data = request.get_json(silent=True) or {}
+    missing = [k for k in ("name", "age") if not data.get(k)]
+    if missing:
+        return jsonify({"error": f"Missing required field(s): {', '.join(missing)}"}), 400
+    try:
+        age = int(data.get("age"))
+    except (ValueError, TypeError):
+        return jsonify({"error": "'age' must be an integer"}), 400
 
-@app.route('/get-characters', methods=['GET'])
+    new_character = Character(
+        id=str(uuid.uuid4()),
+        name=str(data.get("name")).strip(),
+        age=age,
+        gender=data.get("gender"),
+        role=data.get("role"),
+        magic_type=data.get("magic_type"),
+        challenge=data.get("challenge"),
+        personality_traits=data.get("traits", []),
+        likes=data.get("likes", []),
+        dislikes=data.get("dislikes", []),
+        fears=data.get("fears", []),
+        comfort_item=data.get("comfort_item"),
+    )
+    db.session.add(new_character)
+    db.session.commit()
+    return jsonify(new_character.to_dict()), 201
+
+@app.route("/update-character", methods=["PUT", "PATCH"])
+def update_character():
+    """Update a character. Accepts body with 'id' OR query param ?id=..."""
+    data = request.get_json(silent=True) or {}
+    char_id = data.get("id") or request.args.get("id")
+    if not char_id:
+        return jsonify({"error": "id is required"}), 400
+
+    char = db.session.get(Character, char_id)
+    if not char:
+        return jsonify({"error": "Character not found"}), 404
+
+    # Only update fields provided
+    if "name" in data:
+        char.name = (data["name"] or "").strip() or char.name
+    if "age" in data:
+        try:
+            char.age = int(data["age"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "'age' must be an integer"}), 400
+    if "gender" in data:
+        char.gender = data["gender"]
+    if "role" in data:
+        char.role = data["role"]
+    if "magic_type" in data:
+        char.magic_type = data["magic_type"]
+    if "challenge" in data:
+        char.challenge = data["challenge"]
+    if "likes" in data:
+        char.likes = _as_list(data["likes"])
+    if "dislikes" in data:
+        char.dislikes = _as_list(data["dislikes"])
+    if "fears" in data:
+        char.fears = _as_list(data["fears"])
+    if "personality_traits" in data:
+        char.personality_traits = _as_list(data["personality_traits"])
+    if "siblings" in data:
+        char.siblings = _as_list(data["siblings"])
+    if "friends" in data:
+        char.friends = _as_list(data["friends"])
+    if "comfort_item" in data:
+        char.comfort_item = data["comfort_item"]
+
+    db.session.commit()
+    return jsonify(char.to_dict()), 200
+
+@app.route("/characters/<string:char_id>", methods=["DELETE"])
+def delete_character(char_id: str):
+    char = db.session.get(Character, char_id)
+    if not char:
+        return jsonify({"error": "Character not found"}), 404
+    db.session.delete(char)
+    db.session.commit()
+    return jsonify({"status": "deleted", "id": char_id}), 200
+
+@app.route("/get-characters", methods=["GET"])
 def get_characters():
-    """Get all saved characters"""
-    return jsonify(list(stored_characters.values())), 200
+    """Gets characters with simple pagination."""
+    try:
+        page = int(request.args.get("page", 1))
+        per_page = min(50, max(1, int(request.args.get("per_page", 20))))
+    except (ValueError, TypeError):
+        page, per_page = 1, 20
 
-@app.route('/generate-personalized-story', methods=['POST'])
-def generate_personalized_story():
-    """Generate story with custom characters"""
-    data = request.json
-    character_ids = data.get('character_ids', [])
-    theme = data.get('theme', 'Adventure')
-    
-    # Get the characters
-    characters = [stored_characters.get(cid) for cid in character_ids if cid in stored_characters]
-    
-    if not characters:
-        return jsonify({'error': 'No valid characters found'}), 400
-    
-    # Build the prompt with personalized details
-    main_char = characters[0]
-    
-    prompt = f"""
-    Create a therapeutic story for a {main_char['age']}-year-old child named {main_char['name']}.
-    
-    Main Character:
-    - Name: {main_char['name']}
-    - Role: {main_char['role']} 
-    - Special Power: {main_char['magic_type']} magic
-    - Working on: {main_char['challenge']}
-    
-    Additional Characters in the story:
-    {format_additional_characters(characters[1:])}
-    
-    Story Requirements:
-    - Age-appropriate for a {main_char['age']}-year-old
-    - Include healthy coping strategies for {main_char['challenge']}
-    - Show the character learning and growing
-    - Include their magic power in a meaningful way
-    - Make it engaging and therapeutic
-    - End with a positive resolution and wisdom
-    
-    Theme: {theme}
-    """
-    
-    # Generate the story
-    model = genai.GenerativeModel('gemini-pro')
-    response = model.generate_content(prompt)
-    
+    pagination = Character.query.order_by(Character.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
     return jsonify({
-        'story': response.text,
-        'characters': characters,
-        'theme': theme
+        "items": [c.to_dict() for c in pagination.items],
+        "meta": {"page": page, "per_page": per_page, "total": pagination.total, "pages": pagination.pages},
     }), 200
 
-def format_additional_characters(characters):
-    """Helper function to format additional characters"""
-    if not characters:
-        return "No additional characters"
-    
-    formatted = []
-    for char in characters:
-        formatted.append(f"- {char['name']} ({char['role']}, {char['age']} years old)")
-    
-    return '\n'.join(formatted)
-if __name__ == '__main__':
+@app.route("/characters/<string:char_id>", methods=["GET"])
+def get_character(char_id: str):
+    char = db.session.get(Character, char_id)
+    if not char:
+        return jsonify({"error": "Character not found"}), 404
+    return jsonify(char.to_dict()), 200
+
+@app.route("/generate-multi-character-story", methods=["POST"])
+def generate_multi_character_story():
+    data = request.get_json(silent=True) or {}
+    character_ids = data.get("character_ids", [])
+    main_character_id = data.get("main_character_id")
+    theme = data.get("theme", "Friendship")
+
+    if not main_character_id or not character_ids:
+        return jsonify({"error": "main_character_id and character_ids are required"}), 400
+
+    chars = Character.query.filter(Character.id.in_(character_ids)).all()
+    main_char_db = next((c for c in chars if c.id == main_character_id), None)
+    if not main_char_db:
+        return jsonify({"error": "Main character not found in the provided list"}), 400
+
+    friends = [c.to_dict() for c in chars if c.id != main_character_id]
+    main_char = main_char_db.to_dict()
+
+    prompt_parts = [
+        "You are a master storyteller. Create an enchanting and therapeutic story for a child.",
+        f"\nSTORY DETAILS:\n- Theme: {theme}",
+        f"\nMAIN CHARACTER:\n- Name: {main_char['name']}\n- Age: {main_char['age']}\n- Role: {main_char['role']}",
+        f"- A specific fear they have: {', '.join(main_char.get('fears', ['the dark']))}",
+        f"- Their special comfort item: {main_char.get('comfort_item', 'a cozy blanket')}",
+    ]
+    if friends:
+        prompt_parts.append("\nFRIENDS FEATURED IN THE STORY:")
+        for friend in friends:
+            prompt_parts.append(f"- Friend Name: {friend['name']} (Role: {friend['role']})")
+
+    prompt_parts.extend([
+        "\nNARRATIVE REQUIREMENTS:",
+        f"1. The story MUST be about {main_char['name']} facing their fear.",
+        "2. The story must show how their friends help them.",
+        "3. The character should use their comfort item to help them feel brave.",
+        "4. Conclude with a satisfying resolution where the character feels more confident.",
+        "\nBegin the story now."
+    ])
+    prompt = "\n".join(prompt_parts)
+
+    try:
+        if model is None:
+            raise RuntimeError("Model unavailable")
+        response = model.generate_content(prompt)
+        story_text = getattr(response, "text", "")
+    except Exception as e:
+        logger.warning("Multi-character story model error: %s", e)
+        story_text = (f"{main_char['name']} and their friends went on a wonderful adventure, "
+                      "learning that teamwork is best.")
+
+    return jsonify({"story": story_text}), 200
+
+# --- Main execution ---
+if __name__ == "__main__":
     print("🌟 Enhanced Story Engine Starting...")
     print("✨ Now with advanced character development, plot structures, and companion dynamics!")
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host="0.0.0.0", port=5000, debug=False)
