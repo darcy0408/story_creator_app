@@ -136,6 +136,7 @@ class _SavedStoriesScreenState extends State<SavedStoriesScreen> {
                                           title: s.title,
                                           storyText: s.storyText,
                                           wisdomGem: '', // optional for saved
+                                          characterName: s.characters.isNotEmpty ? s.characters.first.name : null
                                         ),
                                       ),
                                     );

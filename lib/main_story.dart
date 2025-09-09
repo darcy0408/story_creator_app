@@ -140,6 +140,7 @@ class _StoryScreenState extends State<StoryScreen> {
               title: (data['title'] ?? 'Your Story') as String,
               storyText: (data['story_text'] ?? '') as String,
               wisdomGem: (data['wisdom_gem'] ?? '') as String,
+              characterName: _selectedCharacter?.name,
             ),
           ),
         );

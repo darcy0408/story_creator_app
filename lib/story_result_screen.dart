@@ -1,30 +1,31 @@
 // lib/story_result_screen.dart
 
 import 'package:flutter/material.dart';
+import 'story_reader_screen.dart';
 
 class StoryResultScreen extends StatelessWidget {
   final String title;
   final String storyText;
   final String wisdomGem;
+  final String? characterName; 
 
   const StoryResultScreen({
     super.key,
     required this.title,
     required this.storyText,
     required this.wisdomGem,
+    this.characterName,  // ADD THIS
   });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // The title is now displayed in the body, so we can keep the AppBar clean.
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: IconThemeData(color: Colors.deepPurple),
       ),
       body: SingleChildScrollView(
-        // Add more padding for a book-like feel
         padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -44,7 +45,7 @@ class StoryResultScreen extends StatelessWidget {
               storyText,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     fontSize: 18,
-                    height: 1.5, // Increases the space between lines
+                    height: 1.5,
                   ),
             ),
             const SizedBox(height: 32),
@@ -64,6 +65,37 @@ class StoryResultScreen extends StatelessWidget {
                         fontStyle: FontStyle.italic,
                         color: Colors.deepPurple,
                       ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // ADD THE READ TO ME BUTTON HERE
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => StoryReaderScreen(
+                        title: title,
+                        storyText: storyText,
+                        characterName: characterName,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.volume_up, size: 28),
+                label: const Text(
+                  'Read to Me!',
+                  style: TextStyle(fontSize: 18),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
                 ),
               ),
             ),
