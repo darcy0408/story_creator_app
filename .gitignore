@@ -70,3 +70,27 @@ Thumbs.db
 *.pem
 *.crt
 *.p12
+
+# =======================
+# Local SQLite databases
+# =======================
+backend/characters.db
+# (optional) ignore all .db files in the repo:
+# *.db
+
+backend/python/
+
+# =======================
+# Local SQLite databases
+# =======================
+backend/characters.db
+*.db
+
+# Ignore local tooling folder (if it's not source code)
+backend/python/
+
+
+
+
+
+
