@@ -1,6 +1,6 @@
 """
-Enhanced Interactive Children's Adventure Engine – API v2.0 (Refactor)
-- Bug fixes, safer parsing, better validation, and small DX upgrades.
+Enhanced Interactive Children's Adventure Engine – API v2.0 (Refactor, fixed)
+- Single update route, fixed /get-characters, safer parsing, same behavior.
 """
 
 import os
@@ -15,7 +15,6 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 import google.generativeai as genai
-from sqlalchemy import Index
 from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
 
 # ----------------------
@@ -27,7 +26,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 basedir = os.path.abspath(os.path.dirname(__file__))
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(basedir, 'characters.db')}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["JSON_SORT_KEYS"] = False  # keep response order predictable
+app.config["JSON_SORT_KEYS"] = False
 
 db = SQLAlchemy(app)
 
@@ -42,7 +41,6 @@ logger = logging.getLogger("story_engine")
 # ----------------------
 class Character(db.Model):
     """Stores character information, traits, relationships, and metadata."""
-
     id = db.Column(db.String(36), primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     age = db.Column(db.Integer, nullable=False)
@@ -51,7 +49,7 @@ class Character(db.Model):
     magic_type = db.Column(db.String(50))
     challenge = db.Column(db.Text)
 
-    # SQLite JSON (persists as TEXT underneath)
+    # SQLite JSON (persists as TEXT)
     personality_traits = db.Column(SQLITE_JSON, default=list)
     siblings = db.Column(SQLITE_JSON, default=list)
     friends = db.Column(SQLITE_JSON, default=list)
@@ -81,12 +79,6 @@ class Character(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
-    def get_name_and_role(self):
-        return {"name": self.name, "role": self.role}
-
-
-Index("ix_character_created_at", Character.created_at)
-
 with app.app_context():
     db.create_all()
 
@@ -100,7 +92,6 @@ else:
     genai.configure(api_key=api_key)
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
-
 try:
     model = genai.GenerativeModel(GEMINI_MODEL) if api_key else None
 except Exception as e:
@@ -211,7 +202,7 @@ def _safe_extract_title_and_gem(text: str, theme: str):
 def _as_list(v):
     """Accept list, JSON string, comma string, or None; return list[str]."""
     if isinstance(v, list):
-        return v
+        return [str(x) for x in v]
     if v in (None, "", []):
         return []
     if isinstance(v, str):
@@ -221,7 +212,7 @@ def _as_list(v):
         if s.startswith("[") and s.endswith("]"):
             try:
                 parsed = json.loads(s)
-                return parsed if isinstance(parsed, list) else [s]
+                return [str(x) for x in parsed] if isinstance(parsed, list) else [s]
             except Exception:
                 pass
         return [part.strip() for part in s.split(",") if part.strip()]
@@ -236,7 +227,6 @@ def health():
 
 @app.route("/get-story-themes", methods=["GET"])
 def get_story_themes():
-    """Small helper for your UI to list themes."""
     return jsonify(["Adventure", "Friendship", "Magic", "Dragons", "Castles", "Unicorns", "Space", "Ocean"]), 200
 
 @app.route("/generate-story", methods=["POST"])
@@ -284,29 +274,26 @@ def create_character():
         role=data.get("role"),
         magic_type=data.get("magic_type"),
         challenge=data.get("challenge"),
-        personality_traits=data.get("traits", []),
-        likes=data.get("likes", []),
-        dislikes=data.get("dislikes", []),
-        fears=data.get("fears", []),
+        personality_traits=_as_list(data.get("traits", [])),
+        likes=_as_list(data.get("likes", [])),
+        dislikes=_as_list(data.get("dislikes", [])),
+        fears=_as_list(data.get("fears", [])),
         comfort_item=data.get("comfort_item"),
     )
     db.session.add(new_character)
     db.session.commit()
     return jsonify(new_character.to_dict()), 201
 
-@app.route("/update-character", methods=["PUT", "PATCH"])
-def update_character():
-    """Update a character. Accepts body with 'id' OR query param ?id=..."""
-    data = request.get_json(silent=True) or {}
-    char_id = data.get("id") or request.args.get("id")
-    if not char_id:
-        return jsonify({"error": "id is required"}), 400
-
+# ---- SINGLE update route (PATCH/PUT) ----
+@app.route("/characters/<string:char_id>", methods=["PATCH", "PUT"])
+def update_character(char_id: str):
+    """Partial update allowed."""
     char = db.session.get(Character, char_id)
     if not char:
         return jsonify({"error": "Character not found"}), 404
 
-    # Only update fields provided
+    data = request.get_json(silent=True) or {}
+
     if "name" in data:
         char.name = (data["name"] or "").strip() or char.name
     if "age" in data:
@@ -328,8 +315,8 @@ def update_character():
         char.dislikes = _as_list(data["dislikes"])
     if "fears" in data:
         char.fears = _as_list(data["fears"])
-    if "personality_traits" in data:
-        char.personality_traits = _as_list(data["personality_traits"])
+    if "personality_traits" in data or "traits" in data:
+        char.personality_traits = _as_list(data.get("personality_traits", data.get("traits", [])))
     if "siblings" in data:
         char.siblings = _as_list(data["siblings"])
     if "friends" in data:
@@ -351,18 +338,9 @@ def delete_character(char_id: str):
 
 @app.route("/get-characters", methods=["GET"])
 def get_characters():
-    """Gets characters with simple pagination."""
-    try:
-        page = int(request.args.get("page", 1))
-        per_page = min(50, max(1, int(request.args.get("per_page", 20))))
-    except (ValueError, TypeError):
-        page, per_page = 1, 20
-
-    pagination = Character.query.order_by(Character.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
-    return jsonify({
-        "items": [c.to_dict() for c in pagination.items],
-        "meta": {"page": page, "per_page": per_page, "total": pagination.total, "pages": pagination.pages},
-    }), 200
+    """Return a simple LIST to match the Flutter code that expects a list."""
+    chars = Character.query.order_by(Character.created_at.desc()).all()
+    return jsonify([c.to_dict() for c in chars]), 200
 
 @app.route("/characters/<string:char_id>", methods=["GET"])
 def get_character(char_id: str):
@@ -392,14 +370,14 @@ def generate_multi_character_story():
     prompt_parts = [
         "You are a master storyteller. Create an enchanting and therapeutic story for a child.",
         f"\nSTORY DETAILS:\n- Theme: {theme}",
-        f"\nMAIN CHARACTER:\n- Name: {main_char['name']}\n- Age: {main_char['age']}\n- Role: {main_char['role']}",
+        f"\nMAIN CHARACTER:\n- Name: {main_char['name']}\n- Age: {main_char['age']}\n- Role: {main_char.get('role','Hero')}",
         f"- A specific fear they have: {', '.join(main_char.get('fears', ['the dark']))}",
         f"- Their special comfort item: {main_char.get('comfort_item', 'a cozy blanket')}",
     ]
     if friends:
         prompt_parts.append("\nFRIENDS FEATURED IN THE STORY:")
         for friend in friends:
-            prompt_parts.append(f"- Friend Name: {friend['name']} (Role: {friend['role']})")
+            prompt_parts.append(f"- Friend Name: {friend['name']} (Role: {friend.get('role','Friend')})")
 
     prompt_parts.extend([
         "\nNARRATIVE REQUIREMENTS:",
