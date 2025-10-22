@@ -365,7 +365,7 @@ class _ReadingDashboardScreenState extends State<ReadingDashboardScreen> {
         final progressPercent = (_progress!.totalWordsLearned / achievement.requiredWords).clamp(0.0, 1.0);
 
         return Card(
-          color: isEarned ? achievement.color.shade50 : Colors.grey.shade100,
+          color: isEarned ? achievement.color.withOpacity(0.2) : Colors.grey.shade100,
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(

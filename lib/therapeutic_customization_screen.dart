@@ -77,7 +77,7 @@ class _TherapeuticCustomizationScreenState
             // Therapeutic Goal
             _buildSectionCard(
               'What do you want to work on?',
-              Icons.target_outlined,
+              Icons.track_changes,
               _buildGoalSelector(),
             ),
 

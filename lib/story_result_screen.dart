@@ -411,7 +411,7 @@ class _StoryResultScreenState extends State<StoryResultScreen> {
           children: [
             // Display the title prominently
             Text(
-              title,
+              widget.title,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
@@ -421,7 +421,7 @@ class _StoryResultScreenState extends State<StoryResultScreen> {
 
             // Use a larger, more readable font for the story
             Text(
-              storyText,
+              widget.storyText,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     fontSize: 18,
                     height: 1.5,
