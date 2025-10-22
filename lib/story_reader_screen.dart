@@ -8,6 +8,7 @@ import 'reading_celebration_dialog.dart';
 import 'reading_models.dart';
 import 'phonics_helper.dart';
 import 'story_narrator.dart';
+import 'reading_analytics_service.dart';
 
 class StoryReaderScreen extends StatefulWidget {
   final String title;
@@ -28,6 +29,7 @@ class StoryReaderScreen extends StatefulWidget {
 class _StoryReaderScreenState extends State<StoryReaderScreen> {
   final FlutterTts flutterTts = FlutterTts();
   final _readingService = ReadingProgressService();
+  final _analyticsService = ReadingAnalyticsService();
   late final StoryNarrator _narrator;
 
   List<String> words = [];
@@ -49,6 +51,16 @@ class _StoryReaderScreenState extends State<StoryReaderScreen> {
     _setupNarrator();
     _parseWords();
     _loadReadingProgress();
+    _startAnalyticsSession();
+  }
+
+  /// Start tracking reading analytics
+  Future<void> _startAnalyticsSession() async {
+    await _analyticsService.startSession(
+      storyId: widget.title.hashCode.toString(), // Simple ID generation
+      storyTitle: widget.title,
+      totalWords: words.length,
+    );
   }
 
   Future<void> _loadReadingProgress() async {
@@ -133,6 +145,9 @@ class _StoryReaderScreenState extends State<StoryReaderScreen> {
   Future<void> _showWordDefinition(String word, int index) async {
     // Clean the word of punctuation
     String cleanWord = word.toLowerCase().replaceAll(RegExp(r'[.,!?;:\'"!]'), '');
+
+    // Track word interaction for analytics
+    _analyticsService.markWordRead(index, cleanWord);
 
     // Track word interaction for learn-to-read mode
     if (_learnToReadMode && cleanWord.isNotEmpty) {
@@ -435,10 +450,16 @@ class _StoryReaderScreenState extends State<StoryReaderScreen> {
 
   @override
   void dispose() {
+    _endAnalyticsSession();
     _narrator.dispose();
     flutterTts.stop();
     scrollController.dispose();
     super.dispose();
+  }
+
+  /// End tracking reading analytics
+  Future<void> _endAnalyticsSession() async {
+    await _analyticsService.endSession();
   }
 
   @override

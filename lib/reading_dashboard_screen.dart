@@ -5,6 +5,7 @@ import 'reading_progress_service.dart';
 import 'reading_models.dart';
 import 'word_practice_games_screen.dart';
 import 'parent_report_screen.dart';
+import 'reading_analytics_screen.dart';
 
 class ReadingDashboardScreen extends StatefulWidget {
   const ReadingDashboardScreen({super.key});
@@ -64,6 +65,21 @@ class _ReadingDashboardScreenState extends State<ReadingDashboardScreen> {
           const SizedBox(width: 8),
           PopupMenuButton(
             itemBuilder: (context) => [
+              PopupMenuItem(
+                child: ListTile(
+                  leading: const Icon(Icons.analytics),
+                  title: const Text('Reading Analytics'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ReadingAnalyticsScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ),
               PopupMenuItem(
                 child: ListTile(
                   leading: const Icon(Icons.assessment),
