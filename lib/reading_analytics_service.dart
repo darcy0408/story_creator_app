@@ -130,7 +130,7 @@ class ReadingAnalyticsService {
     _wordsReadIndices.add(wordIndex);
 
     // Track word taps
-    final cleanWord = word.toLowerCase().replaceAll(RegExp(r'[.,!?;:\'"!]'), '');
+    final cleanWord = word.toLowerCase().replaceAll(RegExp(r'''[.,!?;:'"!]'''), '');
     _wordTapCounts[cleanWord] = (_wordTapCounts[cleanWord] ?? 0) + 1;
   }
 

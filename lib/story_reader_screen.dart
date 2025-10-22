@@ -144,7 +144,7 @@ class _StoryReaderScreenState extends State<StoryReaderScreen> {
 
   Future<void> _showWordDefinition(String word, int index) async {
     // Clean the word of punctuation
-    String cleanWord = word.toLowerCase().replaceAll(RegExp(r'[.,!?;:\'"!]'), '');
+    String cleanWord = word.toLowerCase().replaceAll(RegExp(r'''[.,!?;:'"!]'''), '');
 
     // Track word interaction for analytics
     _analyticsService.markWordRead(index, cleanWord);

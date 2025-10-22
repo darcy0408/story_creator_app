@@ -44,7 +44,7 @@ class StoryNarrator {
 
     // Find the word in our word list
     for (int i = _currentWordIndex; i < _words.length; i++) {
-      final cleanWord = _words[i].toLowerCase().replaceAll(RegExp(r'[.,!?;:\'"!]'), '');
+      final cleanWord = _words[i].toLowerCase().replaceAll(RegExp(r'''[.,!?;:'"!]'''), '');
       if (cleanWord.isNotEmpty && cleanWord == spokenWord.toLowerCase()) {
         _currentWordIndex = i;
         onWordHighlight?.call(i);
