@@ -462,6 +462,7 @@ class _StoryScreenState extends State<StoryScreen> {
                 MaterialPageRoute(builder: (_) => const ReadingUnlocksScreen()),
               );
             },
+          ),
           // Feelings Helper
           IconButton(
             tooltip: 'Feelings Helper',
@@ -471,7 +472,6 @@ class _StoryScreenState extends State<StoryScreen> {
                 MaterialPageRoute(builder: (_) => const EmotionsScreen()),
               );
             },
-          ),
           ),
           IconButton(
             tooltip: 'My stories',
