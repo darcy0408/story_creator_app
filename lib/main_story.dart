@@ -18,6 +18,7 @@ import 'therapeutic_customization_screen.dart';
 import 'therapeutic_models.dart';
 import 'reading_dashboard_screen.dart';
 import 'offline_stories_screen.dart';
+import 'coloring_book_library_screen.dart';
 
 class StoryCreatorApp extends StatelessWidget {
   const StoryCreatorApp({super.key});
@@ -409,6 +410,16 @@ class _StoryScreenState extends State<StoryScreen> {
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const OfflineStoriesScreen()),
+              );
+            },
+          ),
+          // Coloring Book
+          IconButton(
+            tooltip: 'Coloring Book',
+            icon: const Icon(Icons.palette),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ColoringBookLibraryScreen()),
               );
             },
           ),

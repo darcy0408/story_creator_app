@@ -9,6 +9,9 @@ import 'offline_story_cache.dart';
 import 'story_illustration_service.dart';
 import 'illustration_settings_dialog.dart';
 import 'illustrated_story_viewer.dart';
+import 'coloring_book_service.dart';
+import 'character_appearance.dart';
+import 'coloring_book_library_screen.dart';
 
 class StoryResultScreen extends StatefulWidget {
   final String title;
@@ -39,10 +42,12 @@ class _StoryResultScreenState extends State<StoryResultScreen> {
   final _progressService = AdventureProgressService();
   final _cache = OfflineStoryCache();
   final _illustrationService = MockIllustrationService(); // Use mock for now, replace with real service when API key available
+  final _coloringService = MockColoringBookService(); // Use mock for now
   bool _isFavorite = false;
   bool _isLoading = true;
   bool _hasRecordedProgress = false;
   List<StoryIllustration>? _cachedIllustrations;
+  List<ColoringPage>? _cachedColoringPages;
 
   @override
   void initState() {
@@ -51,6 +56,7 @@ class _StoryResultScreenState extends State<StoryResultScreen> {
     _recordAdventureProgress();
     _cacheStoryForOffline();
     _loadCachedIllustrations();
+    _loadCachedColoringPages();
   }
 
   /// Automatically cache the story for offline access
@@ -153,6 +159,154 @@ class _StoryResultScreenState extends State<StoryResultScreen> {
         ),
       ),
     );
+  }
+
+  /// Load cached coloring pages if they exist
+  Future<void> _loadCachedColoringPages() async {
+    if (widget.storyId != null) {
+      final pages = await _coloringService.getColoringPagesForStory(widget.storyId!);
+      if (mounted) {
+        setState(() {
+          _cachedColoringPages = pages.isEmpty ? null : pages;
+        });
+      }
+    }
+  }
+
+  /// Generate coloring pages from the story
+  Future<void> _generateColoringPages() async {
+    try {
+      // Show dialog to ask how many coloring pages
+      final numberOfPages = await showDialog<int>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Generate Coloring Pages'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('How many coloring pages would you like to create?'),
+              const SizedBox(height: 16),
+              DropdownButton<int>(
+                value: 3,
+                items: [1, 2, 3, 4, 5].map((num) {
+                  return DropdownMenuItem(
+                    value: num,
+                    child: Text('$num ${num == 1 ? "page" : "pages"}'),
+                  );
+                }).toList(),
+                onChanged: (value) => Navigator.pop(context, value),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, 3),
+              child: const Text('Generate'),
+            ),
+          ],
+        ),
+      );
+
+      if (numberOfPages == null) return;
+
+      // Show progress dialog
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Generating...'),
+            ],
+          ),
+          content: Text('Creating $numberOfPages coloring ${numberOfPages == 1 ? "page" : "pages"}...'),
+        ),
+      );
+
+      // Extract scenes from story
+      final sentences = widget.storyText.split(RegExp(r'[.!?]+'))
+          .where((s) => s.trim().isNotEmpty)
+          .toList();
+
+      final scenes = <String>[];
+      final segmentSize = sentences.length ~/ numberOfPages;
+
+      for (int i = 0; i < numberOfPages; i++) {
+        final startIndex = i * segmentSize;
+        final endIndex = (i == numberOfPages - 1)
+            ? sentences.length
+            : (i + 1) * segmentSize;
+
+        if (startIndex < sentences.length) {
+          final segmentSentences = sentences.sublist(
+            startIndex,
+            endIndex.clamp(0, sentences.length),
+          );
+          scenes.add(segmentSentences.join('. ') + '.');
+        }
+      }
+
+      // Generate coloring pages
+      final pages = await _coloringService.generateColoringPagesFromStory(
+        storyId: widget.storyId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        storyTitle: widget.title,
+        scenes: scenes,
+        characterAppearance: null, // TODO: Get from character appearance
+      );
+
+      // Cache pages
+      await _coloringService.cacheColoringPages(pages);
+
+      // Hide progress dialog
+      if (mounted) Navigator.pop(context);
+
+      // Update state
+      setState(() {
+        _cachedColoringPages = pages;
+      });
+
+      // Show success
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✨ Created ${pages.length} coloring pages!'),
+            backgroundColor: Colors.green,
+            action: SnackBarAction(
+              label: 'View',
+              textColor: Colors.white,
+              onPressed: _openColoringBook,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to generate coloring pages: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Open the coloring book library
+  void _openColoringBook() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ColoringBookLibraryScreen(),
+      ),
+    ).then((_) => _loadCachedColoringPages());
   }
 
   Future<void> _loadFavoriteStatus() async {
@@ -377,6 +531,35 @@ class _StoryResultScreenState extends State<StoryResultScreen> {
                   backgroundColor: _cachedIllustrations != null
                       ? Colors.purple
                       : Colors.orange,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // COLORING BOOK BUTTON
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: _cachedColoringPages != null
+                    ? _openColoringBook
+                    : _generateColoringPages,
+                icon: Icon(
+                  _cachedColoringPages != null ? Icons.palette : Icons.color_lens,
+                  size: 28,
+                ),
+                label: Text(
+                  _cachedColoringPages != null
+                      ? 'View Coloring Pages (${_cachedColoringPages!.length})'
+                      : 'Create Coloring Pages',
+                  style: const TextStyle(fontSize: 18),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _cachedColoringPages != null
+                      ? Colors.teal
+                      : Colors.pink,
                   padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
