@@ -21,6 +21,7 @@ import 'offline_stories_screen.dart';
 import 'coloring_book_library_screen.dart';
 import 'superhero_builder_screen.dart';
 import 'reading_unlocks_screen.dart';
+import 'emotions_screen.dart';
 
 class StoryCreatorApp extends StatelessWidget {
   const StoryCreatorApp({super.key});
@@ -461,6 +462,16 @@ class _StoryScreenState extends State<StoryScreen> {
                 MaterialPageRoute(builder: (_) => const ReadingUnlocksScreen()),
               );
             },
+          // Feelings Helper
+          IconButton(
+            tooltip: 'Feelings Helper',
+            icon: const Icon(Icons.favorite),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const EmotionsScreen()),
+              );
+            },
+          ),
           ),
           IconButton(
             tooltip: 'My stories',
