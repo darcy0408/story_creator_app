@@ -119,7 +119,7 @@ class VoiceReadingAnalyzer {
   }
 
   /// Handle speech recognition results
-  void _onSpeechResult(stt.SpeechRecognitionResult result) {
+  void _onSpeechResult(dynamic result) {
     final recognizedText = result.recognizedWords.toLowerCase();
     final words = _parseWords(recognizedText);
 

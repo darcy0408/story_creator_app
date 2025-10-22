@@ -445,7 +445,7 @@ class _StoryScreenState extends State<StoryScreen> {
           // Superhero Builder
           IconButton(
             tooltip: 'Superhero Builder',
-            icon: const Icon(Icons.superhero),
+            icon: const Icon(Icons.shield),
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const SuperheroBuilderScreen()),

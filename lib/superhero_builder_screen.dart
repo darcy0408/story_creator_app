@@ -180,7 +180,7 @@ class _SuperheroBuilderScreenState extends State<SuperheroBuilderScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.superhero, size: 120, color: Colors.deepPurple),
+                const Icon(Icons.shield, size: 120, color: Colors.deepPurple),
                 const SizedBox(height: 24),
                 const Text(
                   'Create Your Superhero!',
