@@ -7,6 +7,7 @@ import 'reading_progress_service.dart';
 import 'reading_celebration_dialog.dart';
 import 'reading_models.dart';
 import 'phonics_helper.dart';
+import 'story_narrator.dart';
 
 class StoryReaderScreen extends StatefulWidget {
   final String title;
@@ -27,76 +28,66 @@ class StoryReaderScreen extends StatefulWidget {
 class _StoryReaderScreenState extends State<StoryReaderScreen> {
   final FlutterTts flutterTts = FlutterTts();
   final _readingService = ReadingProgressService();
+  late final StoryNarrator _narrator;
 
   List<String> words = [];
   int currentWordIndex = -1;
   bool isPlaying = false;
-  double speechRate = 0.4; // Slower for kids
-  double pitch = 1.1;
+  NarrationSettings _narrationSettings = const NarrationSettings();
   int wordsReadCount = 0;
 
-  Timer? highlightTimer;
   ScrollController scrollController = ScrollController();
 
   bool _learnToReadMode = false;
   ReadingProgress? _readingProgress;
   final Set<String> _wordsInteractedWith = {};
-  
-  // Word definitions for educational value
-  final Map<String, String> definitions = {
-    'adventure': 'An exciting experience or journey',
-    'brave': 'Having courage, not being afraid',
-    'explore': 'To travel and discover new places',
-    'magical': 'Having special or supernatural powers',
-    'journey': 'A trip from one place to another',
-  };
 
   @override
   void initState() {
     super.initState();
-    _initializeTTS();
+    _narrator = StoryNarrator();
+    _setupNarrator();
     _parseWords();
+    _loadReadingProgress();
   }
 
-  void _initializeTTS() async {
-    await flutterTts.setLanguage("en-US");
-    await flutterTts.setSpeechRate(speechRate);
-    await flutterTts.setPitch(pitch);
-    await flutterTts.setVolume(1.0);
-    
-    // Set up completion handler
-    flutterTts.setCompletionHandler(() {
+  Future<void> _loadReadingProgress() async {
+    final progress = await _readingService.loadProgress();
+    setState(() {
+      _readingProgress = progress;
+      _learnToReadMode = progress.learnToReadModeEnabled;
+    });
+  }
+
+  void _setupNarrator() {
+    _narrator.onWordHighlight = (index) {
+      setState(() {
+        currentWordIndex = index;
+        if (index >= 0) wordsReadCount = index + 1;
+      });
+      if (_narrationSettings.autoScroll) {
+        _scrollToWord(index);
+      }
+    };
+
+    _narrator.onNarrationComplete = () {
       setState(() {
         isPlaying = false;
         currentWordIndex = -1;
       });
       _showCompletionDialog();
-    });
-    
-    // Progress handler for word highlighting
-    flutterTts.setProgressHandler((String text, int startOffset, int endOffset, String word) {
-      // This gives us word boundaries during speech
-      _updateHighlightedWord(word);
-    });
+    };
+
+    _narrator.onPlayingStateChanged = (playing) {
+      setState(() {
+        isPlaying = playing;
+      });
+    };
   }
 
   void _parseWords() {
     // Split story into words for highlighting
-    words = widget.storyText.split(' ');
-  }
-
-  void _updateHighlightedWord(String spokenWord) {
-    // Find and highlight the current word being spoken
-    for (int i = currentWordIndex + 1; i < words.length; i++) {
-      if (words[i].toLowerCase().contains(spokenWord.toLowerCase())) {
-        setState(() {
-          currentWordIndex = i;
-          wordsReadCount++;
-        });
-        _scrollToWord(i);
-        break;
-      }
-    }
+    words = widget.storyText.split(RegExp(r'\s+'));
   }
 
   void _scrollToWord(int index) {
@@ -120,111 +111,260 @@ class _StoryReaderScreenState extends State<StoryReaderScreen> {
   }
 
   Future<void> _startReading() async {
-    setState(() {
-      isPlaying = true;
-      if (currentWordIndex == -1) currentWordIndex = 0;
-    });
-    
-    // Start TTS
-    await flutterTts.speak(widget.storyText);
-    
-    // Start a timer to simulate word highlighting
-    // Since Flutter TTS doesn't give perfect word boundaries,
-    // we'll estimate based on reading speed
-    _startHighlightSimulation();
-  }
-
-  void _startHighlightSimulation() {
-    // Calculate approximate time per word based on speech rate
-    final int totalWords = words.length;
-    final double estimatedDurationSeconds = (widget.storyText.length / 14) / speechRate;
-    final int millisecondsPerWord = ((estimatedDurationSeconds * 1000) / totalWords).round();
-    
-    highlightTimer?.cancel();
-    highlightTimer = Timer.periodic(Duration(milliseconds: millisecondsPerWord), (timer) {
-      if (!isPlaying || currentWordIndex >= words.length - 1) {
-        timer.cancel();
-        return;
-      }
-      
-      setState(() {
-        currentWordIndex++;
-        wordsReadCount++;
-      });
-      _scrollToWord(currentWordIndex);
-    });
+    await _narrator.startNarration(
+      widget.storyText,
+      speed: _narrationSettings.speed,
+      pitch: _narrationSettings.pitch,
+    );
   }
 
   Future<void> _pauseReading() async {
-    await flutterTts.pause();
-    highlightTimer?.cancel();
-    setState(() {
-      isPlaying = false;
-    });
+    await _narrator.pauseNarration();
   }
 
   Future<void> _stopReading() async {
-    await flutterTts.stop();
-    highlightTimer?.cancel();
+    await _narrator.stopNarration();
     setState(() {
-      isPlaying = false;
       currentWordIndex = -1;
+      wordsReadCount = 0;
     });
   }
 
-  void _showWordDefinition(String word, int index) {
+  Future<void> _showWordDefinition(String word, int index) async {
     // Clean the word of punctuation
-    String cleanWord = word.toLowerCase().replaceAll(RegExp(r'[.,!?;:]'), '');
-    
+    String cleanWord = word.toLowerCase().replaceAll(RegExp(r'[.,!?;:\'"!]'), '');
+
+    // Track word interaction for learn-to-read mode
+    if (_learnToReadMode && cleanWord.isNotEmpty) {
+      _wordsInteractedWith.add(cleanWord);
+
+      // Mark word as learned
+      final isNewWord = await _readingService.markWordLearned(cleanWord);
+
+      if (isNewWord && mounted) {
+        // Show celebration for new word
+        WordLearnedSnackBar.show(context, cleanWord, isNew: true);
+      }
+    }
+
+    // Get phonics breakdown
+    final phonicsSounds = PhonicsHelper.breakIntoSounds(cleanWord);
+    final phoneticPronunciation = PhonicsHelper.getPhoneticPronunciation(cleanWord);
+    final syllables = PhonicsHelper.getSyllables(cleanWord);
+    final isSightWord = PhonicsHelper.isSightWord(cleanWord);
+    final difficulty = PhonicsHelper.getDifficultyLevel(cleanWord);
+    final rhymingWords = PhonicsHelper.getRhymingWords(cleanWord);
+
     // Speak the individual word slowly
-    flutterTts.setSpeechRate(0.3);
-    flutterTts.speak(cleanWord);
-    flutterTts.setSpeechRate(speechRate);
-    
-    // Show definition if available
-    String definition = definitions[cleanWord] ?? 'Tap to hear this word!';
-    
+    await _narrator.speakWord(cleanWord, speed: _narrationSettings.speed);
+
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(
-          cleanWord,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.deepPurple,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+        title: Row(
           children: [
-            Text(
-              definition,
-              style: const TextStyle(fontSize: 18),
+            Expanded(
+              child: Text(
+                cleanWord,
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.deepPurple,
+                ),
+              ),
             ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: () {
-                flutterTts.setSpeechRate(0.3);
-                flutterTts.speak(cleanWord);
-                flutterTts.setSpeechRate(speechRate);
-              },
-              icon: const Icon(Icons.volume_up),
-              label: const Text('Hear it again'),
-            ),
+            if (isSightWord)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.amber,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Sight Word',
+                  style: TextStyle(fontSize: 12, color: Colors.white),
+                ),
+              ),
           ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Phonetic pronunciation
+              Card(
+                color: Colors.blue.shade50,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.hearing, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Sounds like:',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              phoneticPronunciation,
+                              style: const TextStyle(fontSize: 20, color: Colors.blue),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.volume_up, color: Colors.blue),
+                        onPressed: () async {
+                          await _narrator.speakWord(cleanWord, speed: _narrationSettings.speed);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Phonics breakdown
+              const Text(
+                'Letter Sounds:',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: phonicsSounds.map((sound) {
+                  return GestureDetector(
+                    onTap: () async {
+                      await _narrator.speakWord(sound, speed: 0.2);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green.shade300, width: 2),
+                      ),
+                      child: Text(
+                        sound,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Syllables
+              if (syllables.length > 1) ...[
+                const Text(
+                  'Syllables:',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: syllables.map((syllable) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        syllable,
+                        style: const TextStyle(fontSize: 18, color: Colors.purple),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Difficulty level
+              Row(
+                children: [
+                  const Icon(Icons.bar_chart, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Level: $difficulty',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              // Rhyming words
+              if (rhymingWords.isNotEmpty) ...[
+                const Text(
+                  'Rhymes with:',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: rhymingWords.map((rhyme) {
+                    return Chip(
+                      label: Text(rhyme),
+                      backgroundColor: Colors.orange.shade100,
+                    );
+                  }).toList(),
+                ),
+              ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              // Speak word slowly broken into sounds
+              await _narrator.speakPhonemes(phonicsSounds, speed: _narrationSettings.speed);
+              await _narrator.speakWord(cleanWord, speed: _narrationSettings.speed);
+            },
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Sound it Out'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  void _showCompletionDialog() {
+  Future<void> _showCompletionDialog() async {
+    // Save reading session if in learn-to-read mode
+    if (_learnToReadMode && _wordsInteractedWith.isNotEmpty) {
+      final result = await _readingService.processReadingSession(
+        widget.storyText,
+        _wordsInteractedWith.toList(),
+      );
+
+      if (mounted) {
+        // Show celebration dialog with achievements
+        await ReadingCelebrationDialog.show(context, result);
+      }
+    }
+
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -246,10 +386,25 @@ class _StoryReaderScreenState extends State<StoryReaderScreen> {
               'You read ${wordsReadCount} words!',
               style: const TextStyle(fontSize: 20),
             ),
+            if (_learnToReadMode && _wordsInteractedWith.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  'Learned ${_wordsInteractedWith.length} new words!',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    color: Colors.green,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             if (widget.characterName != null)
-              Text(
-                '${widget.characterName} is proud of you!',
-                style: const TextStyle(fontSize: 18, fontStyle: FontStyle.italic),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '${widget.characterName} is proud of you!',
+                  style: const TextStyle(fontSize: 18, fontStyle: FontStyle.italic),
+                ),
               ),
           ],
         ),
@@ -261,6 +416,7 @@ class _StoryReaderScreenState extends State<StoryReaderScreen> {
               setState(() {
                 currentWordIndex = -1;
                 wordsReadCount = 0;
+                _wordsInteractedWith.clear();
               });
             },
             child: const Text('Read Again'),
@@ -279,8 +435,8 @@ class _StoryReaderScreenState extends State<StoryReaderScreen> {
 
   @override
   void dispose() {
+    _narrator.dispose();
     flutterTts.stop();
-    highlightTimer?.cancel();
     scrollController.dispose();
     super.dispose();
   }
@@ -289,7 +445,32 @@ class _StoryReaderScreenState extends State<StoryReaderScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Read Along'),
+        title: Row(
+          children: [
+            const Text('Read Along'),
+            if (_learnToReadMode) ...[
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.school, size: 16, color: Colors.white),
+                    SizedBox(width: 4),
+                    Text(
+                      'Learn Mode',
+                      style: TextStyle(fontSize: 12, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
         backgroundColor: Colors.deepPurple,
         actions: [
           IconButton(
@@ -302,9 +483,10 @@ class _StoryReaderScreenState extends State<StoryReaderScreen> {
                   content: const Text(
                     '• Tap play to start reading\n'
                     '• Words will highlight as they are read\n'
-                    '• Tap any word to hear it and see its meaning\n'
+                    '• Tap any word to see phonics breakdown\n'
+                    '• Each sound can be tapped to hear it\n'
                     '• Adjust reading speed with the slider\n'
-                    '• Follow along to improve your reading!',
+                    '• Learn-to-Read mode tracks your progress!',
                     style: TextStyle(fontSize: 16),
                   ),
                   actions: [
@@ -466,20 +648,20 @@ class _StoryReaderScreenState extends State<StoryReaderScreen> {
                     const Text('Speed:', style: TextStyle(fontWeight: FontWeight.bold)),
                     Expanded(
                       child: Slider(
-                        value: speechRate,
+                        value: _narrationSettings.speed,
                         min: 0.2,
                         max: 0.8,
                         divisions: 6,
-                        label: '${(speechRate * 2).toStringAsFixed(1)}x',
+                        label: '${(_narrationSettings.speed * 2).toStringAsFixed(1)}x',
                         onChanged: (value) async {
                           setState(() {
-                            speechRate = value;
+                            _narrationSettings = _narrationSettings.copyWith(speed: value);
                           });
-                          await flutterTts.setSpeechRate(speechRate);
+                          await _narrator.updateSpeed(value);
                         },
                       ),
                     ),
-                    Text('${(speechRate * 2).toStringAsFixed(1)}x'),
+                    Text('${(_narrationSettings.speed * 2).toStringAsFixed(1)}x'),
                   ],
                 ),
                 

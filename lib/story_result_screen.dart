@@ -5,6 +5,7 @@ import 'story_reader_screen.dart';
 import 'storage_service.dart';
 import 'adventure_progress_service.dart';
 import 'celebration_dialog.dart';
+import 'offline_story_cache.dart';
 
 class StoryResultScreen extends StatefulWidget {
   final String title;
@@ -33,6 +34,7 @@ class StoryResultScreen extends StatefulWidget {
 class _StoryResultScreenState extends State<StoryResultScreen> {
   final _storage = StorageService();
   final _progressService = AdventureProgressService();
+  final _cache = OfflineStoryCache();
   bool _isFavorite = false;
   bool _isLoading = true;
   bool _hasRecordedProgress = false;
@@ -42,6 +44,23 @@ class _StoryResultScreenState extends State<StoryResultScreen> {
     super.initState();
     _loadFavoriteStatus();
     _recordAdventureProgress();
+    _cacheStoryForOffline();
+  }
+
+  /// Automatically cache the story for offline access
+  Future<void> _cacheStoryForOffline() async {
+    final cachedStory = CachedStory(
+      id: widget.storyId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      title: widget.title,
+      storyText: widget.storyText,
+      characterName: widget.characterName ?? 'Unknown',
+      theme: widget.theme ?? 'Adventure',
+      companion: null, // You can add companion if available
+      cachedAt: DateTime.now(),
+      isFavorite: false,
+    );
+
+    await _cache.cacheStory(cachedStory);
   }
 
   Future<void> _loadFavoriteStatus() async {

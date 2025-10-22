@@ -17,6 +17,7 @@ import 'premium_upgrade_screen.dart';
 import 'therapeutic_customization_screen.dart';
 import 'therapeutic_models.dart';
 import 'reading_dashboard_screen.dart';
+import 'offline_stories_screen.dart';
 
 class StoryCreatorApp extends StatelessWidget {
   const StoryCreatorApp({super.key});
@@ -398,6 +399,16 @@ class _StoryScreenState extends State<StoryScreen> {
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ReadingDashboardScreen()),
+              );
+            },
+          ),
+          // Offline Stories
+          IconButton(
+            tooltip: 'Offline Stories',
+            icon: const Icon(Icons.offline_pin),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const OfflineStoriesScreen()),
               );
             },
           ),
