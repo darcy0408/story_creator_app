@@ -58,6 +58,39 @@ class StorageService {
     await _saveAll(list);
   }
 
+  /// Toggle favorite status for a story by ID.
+  Future<void> toggleFavorite(String storyId) async {
+    final list = await loadStories();
+    final index = list.indexWhere((s) => s.id == storyId);
+    if (index == -1) return;
+
+    list[index] = list[index].copyWith(isFavorite: !list[index].isFavorite);
+    await _saveAll(list);
+  }
+
+  /// Update an existing story by ID.
+  Future<void> updateStory(SavedStory updatedStory) async {
+    final list = await loadStories();
+    final index = list.indexWhere((s) => s.id == updatedStory.id);
+    if (index == -1) {
+      // If not found, add it
+      list.insert(0, updatedStory);
+    } else {
+      list[index] = updatedStory;
+    }
+    await _saveAll(list);
+  }
+
+  /// Find a story by ID.
+  Future<SavedStory?> findStoryById(String storyId) async {
+    final list = await loadStories();
+    try {
+      return list.firstWhere((s) => s.id == storyId);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Clear all stories (optional – not used by default UI).
   Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();

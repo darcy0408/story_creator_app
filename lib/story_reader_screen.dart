@@ -3,6 +3,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'dart:async';
+import 'reading_progress_service.dart';
+import 'reading_celebration_dialog.dart';
+import 'reading_models.dart';
+import 'phonics_helper.dart';
 
 class StoryReaderScreen extends StatefulWidget {
   final String title;
@@ -22,16 +26,21 @@ class StoryReaderScreen extends StatefulWidget {
 
 class _StoryReaderScreenState extends State<StoryReaderScreen> {
   final FlutterTts flutterTts = FlutterTts();
-  
+  final _readingService = ReadingProgressService();
+
   List<String> words = [];
   int currentWordIndex = -1;
   bool isPlaying = false;
   double speechRate = 0.4; // Slower for kids
   double pitch = 1.1;
   int wordsReadCount = 0;
-  
+
   Timer? highlightTimer;
   ScrollController scrollController = ScrollController();
+
+  bool _learnToReadMode = false;
+  ReadingProgress? _readingProgress;
+  final Set<String> _wordsInteractedWith = {};
   
   // Word definitions for educational value
   final Map<String, String> definitions = {

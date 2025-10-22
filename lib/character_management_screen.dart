@@ -3,8 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import 'models.dart';                    // <-- Character model lives here
-import 'character_creation_screen.dart'; // <-- This defines CharacterCreationScreen
+import 'models.dart';
+import 'character_creation_screen_enhanced.dart';
+import 'character_edit_screen.dart';
+import 'subscription_service.dart';
+import 'paywall_dialog.dart';
 
 class CharacterManagementScreen extends StatefulWidget {
   const CharacterManagementScreen({super.key});
@@ -15,6 +18,7 @@ class CharacterManagementScreen extends StatefulWidget {
 
 class _CharacterManagementScreenState extends State<CharacterManagementScreen> {
   late Future<List<Character>> _charactersFuture;
+  final _subscriptionService = SubscriptionService();
 
   @override
   void initState() {
@@ -60,9 +64,23 @@ class _CharacterManagementScreenState extends State<CharacterManagementScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
+          // Check character limit
+          final snapshot = await _charactersFuture;
+          final currentCount = snapshot.length;
+          final canCreate = await _subscriptionService.canCreateCharacter(currentCount);
+
+          if (!canCreate) {
+            final maxChars = await _subscriptionService.getMaxCharacters();
+            await PaywallDialog.showCharacterLimitDialog(
+              context,
+              maxCharacters: maxChars,
+            );
+            return;
+          }
+
           // Go to the creation screen; after returning, refresh list
           final created = await Navigator.of(context).push<bool>(
-            MaterialPageRoute(builder: (_) => const CharacterCreationScreen()),
+            MaterialPageRoute(builder: (_) => const CharacterCreationScreenEnhanced()),
           );
           if (created == true) {
             _refreshCharacters();
@@ -96,41 +114,72 @@ class _CharacterManagementScreenState extends State<CharacterManagementScreen> {
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (_, i) {
               final c = characters[i];
-              return ListTile(
-                leading: const Icon(Icons.child_care),
-                title: Text(c.name),
-                subtitle: Text('Age ${c.age} • Role: ${c.role}'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      title: Text(c.name),
-                      content: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('Age: ${c.age}'),
-                            if ((c.gender ?? '').isNotEmpty) Text('Gender: ${c.gender}'),
-                            if ((c.magicType ?? '').isNotEmpty) Text('Magic: ${c.magicType}'),
-                            if ((c.challenge ?? '').isNotEmpty) Text('Challenge: ${c.challenge}'),
-                            if ((c.comfortItem ?? '').isNotEmpty) Text('Comfort item: ${c.comfortItem}'),
-                            if ((c.fears ?? []).isNotEmpty) Text('Fears: ${c.fears!.join(", ")}'),
-                            if ((c.likes ?? []).isNotEmpty) Text('Likes: ${c.likes!.join(", ")}'),
-                            if ((c.dislikes ?? []).isNotEmpty) Text('Dislikes: ${c.dislikes!.join(", ")}'),
-                          ],
-                        ),
+              return Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.deepPurple.shade100,
+                    child: Text(
+                      c.name.substring(0, 1).toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.deepPurple,
                       ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
-                        ),
-                      ],
                     ),
-                  );
-                },
+                  ),
+                  title: Text(
+                    c.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 4),
+                      Text('Age ${c.age} • ${c.gender ?? ""}'),
+                      if (c.role != null && c.role!.isNotEmpty)
+                        Text(
+                          c.role!,
+                          style: TextStyle(
+                            color: Colors.deepPurple.shade700,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                    ],
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.deepPurple),
+                        tooltip: 'Edit',
+                        onPressed: () async {
+                          final updated = await Navigator.of(context).push<bool>(
+                            MaterialPageRoute(
+                              builder: (_) => CharacterEditScreen(character: c),
+                            ),
+                          );
+                          if (updated == true) {
+                            _refreshCharacters();
+                          }
+                        },
+                      ),
+                      const Icon(Icons.chevron_right, color: Colors.grey),
+                    ],
+                  ),
+                  onTap: () async {
+                    final updated = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) => CharacterEditScreen(character: c),
+                      ),
+                    );
+                    if (updated == true) {
+                      _refreshCharacters();
+                    }
+                  },
+                ),
               );
             },
           );

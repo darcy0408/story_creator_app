@@ -69,22 +69,31 @@ class Character {
 // NEW MODEL FOR STORIES
 // ---------------------
 class SavedStory {
+  final String id;
   final String title;
   final String storyText;
   final String theme;
   final List<Character> characters;
   final DateTime createdAt;
+  final bool isInteractive;
+  final bool isFavorite;
+  final String? wisdomGem;
 
   SavedStory({
+    String? id,
     required this.title,
     required this.storyText,
     required this.theme,
     required this.characters,
     required this.createdAt,
-  });
+    this.isInteractive = false,
+    this.isFavorite = false,
+    this.wisdomGem,
+  }) : id = id ?? DateTime.now().millisecondsSinceEpoch.toString();
 
   factory SavedStory.fromJson(Map<String, dynamic> json) {
     return SavedStory(
+      id: json['id'],
       title: json['title'] ?? 'Untitled Story',
       storyText: json['story_text'] ?? '',
       theme: json['theme'] ?? 'Adventure',
@@ -93,14 +102,102 @@ class SavedStory {
               .toList() ??
           [],
       createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
+      isInteractive: json['is_interactive'] ?? false,
+      isFavorite: json['is_favorite'] ?? false,
+      wisdomGem: json['wisdom_gem'],
     );
   }
 
   Map<String, dynamic> toJson() => {
+        'id': id,
         'title': title,
         'story_text': storyText,
         'theme': theme,
         'characters': characters.map((c) => c.toJson()).toList(),
         'created_at': createdAt.toIso8601String(),
+        'is_interactive': isInteractive,
+        'is_favorite': isFavorite,
+        'wisdom_gem': wisdomGem,
+      };
+
+  SavedStory copyWith({
+    String? id,
+    String? title,
+    String? storyText,
+    String? theme,
+    List<Character>? characters,
+    DateTime? createdAt,
+    bool? isInteractive,
+    bool? isFavorite,
+    String? wisdomGem,
+  }) {
+    return SavedStory(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      storyText: storyText ?? this.storyText,
+      theme: theme ?? this.theme,
+      characters: characters ?? this.characters,
+      createdAt: createdAt ?? this.createdAt,
+      isInteractive: isInteractive ?? this.isInteractive,
+      isFavorite: isFavorite ?? this.isFavorite,
+      wisdomGem: wisdomGem ?? this.wisdomGem,
+    );
+  }
+}
+
+// ---------------------
+// INTERACTIVE STORY MODELS
+// ---------------------
+class StoryChoice {
+  final String id;
+  final String text;
+  final String description;
+
+  StoryChoice({
+    required this.id,
+    required this.text,
+    required this.description,
+  });
+
+  factory StoryChoice.fromJson(Map<String, dynamic> json) {
+    return StoryChoice(
+      id: json['id'] ?? '',
+      text: json['text'] ?? '',
+      description: json['description'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'text': text,
+        'description': description,
+      };
+}
+
+class StorySegment {
+  final String text;
+  final List<StoryChoice>? choices;
+  final bool isEnding;
+
+  StorySegment({
+    required this.text,
+    this.choices,
+    this.isEnding = false,
+  });
+
+  factory StorySegment.fromJson(Map<String, dynamic> json) {
+    return StorySegment(
+      text: json['text'] ?? '',
+      choices: (json['choices'] as List<dynamic>?)
+          ?.map((c) => StoryChoice.fromJson(c))
+          .toList(),
+      isEnding: json['is_ending'] ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'text': text,
+        'choices': choices?.map((c) => c.toJson()).toList(),
+        'is_ending': isEnding,
       };
 }
