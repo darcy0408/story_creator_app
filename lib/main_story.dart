@@ -19,6 +19,8 @@ import 'therapeutic_models.dart';
 import 'reading_dashboard_screen.dart';
 import 'offline_stories_screen.dart';
 import 'coloring_book_library_screen.dart';
+import 'superhero_builder_screen.dart';
+import 'reading_unlocks_screen.dart';
 
 class StoryCreatorApp extends StatelessWidget {
   const StoryCreatorApp({super.key});
@@ -438,6 +440,26 @@ class _StoryScreenState extends State<StoryScreen> {
               if (selectedTheme != null && mounted) {
                 setState(() => _selectedTheme = selectedTheme);
               }
+            },
+          ),
+          // Superhero Builder
+          IconButton(
+            tooltip: 'Superhero Builder',
+            icon: const Icon(Icons.superhero),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SuperheroBuilderScreen()),
+              );
+            },
+          ),
+          // Reading Unlocks
+          IconButton(
+            tooltip: 'Reading Unlocks',
+            icon: const Icon(Icons.stars),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ReadingUnlocksScreen()),
+              );
             },
           ),
           IconButton(

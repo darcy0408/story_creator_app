@@ -83,13 +83,13 @@ class TierLimits {
       case SubscriptionTier.free:
         return const TierLimits(
           maxCharacters: 2,
-          maxStoriesPerDay: 3,
-          maxStoriesPerMonth: 30,
+          maxStoriesPerDay: 10, // Increased from 3
+          maxStoriesPerMonth: 100, // Increased from 30
           unlimitedStories: false,
           interactiveStories: false,
           multiCharacterStories: false,
           voiceNarration: true,
-          adventureMap: false,
+          adventureMap: true, // Enable for all users
           customCharacters: true,
           exportStories: false,
           adFree: false,
@@ -343,7 +343,7 @@ class TierPricing {
     yearlySavings: 0,
     features: [
       'Up to 2 characters',
-      '3 stories per day',
+      '10 stories per day',
       'Basic themes (Adventure, Magic)',
       'Voice narration',
       'Basic companions',
