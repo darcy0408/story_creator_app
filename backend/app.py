@@ -49,6 +49,16 @@ class Character(db.Model):
     magic_type = db.Column(db.String(50))
     challenge = db.Column(db.Text)
 
+    # Character type and superhero specific
+    character_type = db.Column(db.String(50), default='Everyday Kid')
+    superhero_name = db.Column(db.String(100))
+    mission = db.Column(db.Text)
+
+    # Appearance
+    hair = db.Column(db.String(50))
+    eyes = db.Column(db.String(50))
+    outfit = db.Column(db.String(200))
+
     # SQLite JSON (persists as TEXT)
     personality_traits = db.Column(SQLITE_JSON, default=list)
     siblings = db.Column(SQLITE_JSON, default=list)
@@ -56,6 +66,8 @@ class Character(db.Model):
     likes = db.Column(SQLITE_JSON, default=list)
     dislikes = db.Column(SQLITE_JSON, default=list)
     fears = db.Column(SQLITE_JSON, default=list)
+    strengths = db.Column(SQLITE_JSON, default=list)
+    goals = db.Column(SQLITE_JSON, default=list)
 
     comfort_item = db.Column(db.String(200))
     created_at = db.Column(db.DateTime, default=datetime.now, index=True)
@@ -69,12 +81,20 @@ class Character(db.Model):
             "role": self.role,
             "magic_type": self.magic_type,
             "challenge": self.challenge,
+            "character_type": self.character_type,
+            "superhero_name": self.superhero_name,
+            "mission": self.mission,
+            "hair": self.hair,
+            "eyes": self.eyes,
+            "outfit": self.outfit,
             "personality_traits": self.personality_traits or [],
             "siblings": self.siblings or [],
             "friends": self.friends or [],
             "likes": self.likes or [],
             "dislikes": self.dislikes or [],
             "fears": self.fears or [],
+            "strengths": self.strengths or [],
+            "goals": self.goals or [],
             "comfort_item": self.comfort_item,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
@@ -160,7 +180,7 @@ class AdvancedStoryEngine:
         self.companion_dynamics = CompanionDynamics()
         self.wisdom_gems = WisdomGems()
 
-    def generate_enhanced_prompt(self, character: str, theme: str, companion: str | None):
+    def generate_enhanced_prompt(self, character: str, theme: str, companion: str | None, therapeutic_prompt: str = ""):
         story_structure = self.story_structures.get_random_structure(theme)
         companion_info = self.companion_dynamics.get_companion_info(companion)
         plot_twist = random.choice(self.story_structures.PLOT_TWISTS)
@@ -177,11 +197,25 @@ class AdvancedStoryEngine:
                 f"- Companion: {companion}",
                 f"- How Companion Helps: {companion_info['contribution']}",
             ])
+
+        # Add therapeutic elements if provided
+        if therapeutic_prompt:
+            parts.extend([
+                "\nTHERAPEUTIC ELEMENTS:",
+                therapeutic_prompt,
+            ])
+
         parts.extend([
             "\nNARRATIVE REQUIREMENTS:",
             f"1. Start with an engaging opening that introduces {character}.",
             f"2. Incorporate this plot element naturally: {plot_twist}.",
             "3. End with a satisfying resolution.",
+        ])
+
+        if therapeutic_prompt:
+            parts.append("4. Weave therapeutic elements naturally into the story (not preachy or obvious).")
+
+        parts.extend([
             "\nSTORY LENGTH: Approximately 500-600 words.",
             "\nFORMAT REQUIREMENTS:",
             "- Start with: [TITLE: A Creative and Engaging Title]",
@@ -242,8 +276,9 @@ def generate_story_endpoint():
     character = payload.get("character", "a brave adventurer")
     theme = payload.get("theme", "Adventure")
     companion = payload.get("companion")
+    therapeutic_prompt = payload.get("therapeutic_prompt", "")
 
-    prompt = story_engine.generate_enhanced_prompt(character, theme, companion)
+    prompt = story_engine.generate_enhanced_prompt(character, theme, companion, therapeutic_prompt)
     try:
         if model is None:
             raise RuntimeError("Model unavailable")
@@ -251,7 +286,7 @@ def generate_story_endpoint():
         raw_text = getattr(response, "text", "")
         if not raw_text:
             raise ValueError("Empty model response")
-
+            
     except Exception as e:
         print(f"!!! API ERROR: {type(e).__name__}: {str(e)}")
         logger.warning("Model error, using fallback: %s", e)
@@ -261,7 +296,7 @@ def generate_story_endpoint():
             "facing our fears with courage and kindness.\n"
             f"[WISDOM GEM: {WisdomGems.get_wisdom(theme)}]"
         )
-
+        
     title, wisdom_gem, story_text = _safe_extract_title_and_gem(raw_text, theme)
     return jsonify({"title": title, "story_text": story_text, "wisdom_gem": wisdom_gem}), 200
 
@@ -284,10 +319,18 @@ def create_character():
         role=data.get("role"),
         magic_type=data.get("magic_type"),
         challenge=data.get("challenge"),
+        character_type=data.get("character_type", "Everyday Kid"),
+        superhero_name=data.get("superhero_name"),
+        mission=data.get("mission"),
+        hair=data.get("hair"),
+        eyes=data.get("eyes"),
+        outfit=data.get("outfit"),
         personality_traits=_as_list(data.get("traits", [])),
         likes=_as_list(data.get("likes", [])),
         dislikes=_as_list(data.get("dislikes", [])),
         fears=_as_list(data.get("fears", [])),
+        strengths=_as_list(data.get("strengths", [])),
+        goals=_as_list(data.get("goals", [])),
         comfort_item=data.get("comfort_item"),
     )
     db.session.add(new_character)
@@ -333,6 +376,22 @@ def update_character(char_id: str):
         char.friends = _as_list(data["friends"])
     if "comfort_item" in data:
         char.comfort_item = data["comfort_item"]
+    if "character_type" in data:
+        char.character_type = data["character_type"]
+    if "superhero_name" in data:
+        char.superhero_name = data["superhero_name"]
+    if "mission" in data:
+        char.mission = data["mission"]
+    if "hair" in data:
+        char.hair = data["hair"]
+    if "eyes" in data:
+        char.eyes = data["eyes"]
+    if "outfit" in data:
+        char.outfit = data["outfit"]
+    if "strengths" in data:
+        char.strengths = _as_list(data["strengths"])
+    if "goals" in data:
+        char.goals = _as_list(data["goals"])
 
     db.session.commit()
     return jsonify(char.to_dict()), 200
@@ -411,8 +470,199 @@ def generate_multi_character_story():
 
     return jsonify({"story": story_text}), 200
 
+@app.route("/generate-interactive-story", methods=["POST"])
+def generate_interactive_story():
+    """Generate the opening segment of an interactive, choice-based story."""
+    payload = request.get_json(silent=True) or {}
+    character = payload.get("character", "a brave adventurer")
+    theme = payload.get("theme", "Adventure")
+    companion = payload.get("companion")
+    friends = payload.get("friends", [])
+    therapeutic_prompt = payload.get("therapeutic_prompt", "")
+
+    prompt_parts = [
+        "You are a master storyteller creating an interactive choose-your-own-adventure story for children.",
+        f"\nSTORY DETAILS:",
+        f"- Main Character: {character}",
+        f"- Theme: {theme}",
+    ]
+    if companion and companion != "None":
+        prompt_parts.append(f"- Companion: {companion}")
+    if friends:
+        prompt_parts.append(f"- Friends/Siblings in story: {', '.join(friends)}")
+
+    # Add therapeutic elements if provided
+    if therapeutic_prompt:
+        prompt_parts.extend([
+            "\nTHERAPEUTIC ELEMENTS:",
+            therapeutic_prompt,
+            "IMPORTANT: Weave these elements naturally into the story and choices (not preachy).",
+        ])
+
+    prompt_parts.extend([
+        "\nTASK: Create the OPENING segment of an engaging story (150-200 words).",
+        "Set the scene and introduce a situation where the character must make a choice.",
+    ])
+    if friends:
+        prompt_parts.append(f"IMPORTANT: Include {', '.join(friends)} as friends/siblings who appear in the story and can help with choices.")
+
+    prompt_parts.extend([
+        "\nFORMAT YOUR RESPONSE EXACTLY AS JSON:",
+        "{",
+        '  "text": "The story text here...",',
+        '  "choices": [',
+        '    {"id": "choice1", "text": "First option (short)", "description": "What happens if they choose this"},',
+        '    {"id": "choice2", "text": "Second option (short)", "description": "What happens if they choose this"},',
+        '    {"id": "choice3", "text": "Third option (short)", "description": "What happens if they choose this"}',
+        '  ],',
+        '  "is_ending": false',
+        "}",
+        "\nIMPORTANT: Return ONLY valid JSON. No extra text before or after."
+    ])
+    prompt = "\n".join(prompt_parts)
+
+    try:
+        if model is None:
+            raise RuntimeError("Model unavailable")
+        response = model.generate_content(prompt)
+        raw_text = getattr(response, "text", "").strip()
+
+        # Try to extract JSON from response
+        json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        if json_match:
+            raw_text = json_match.group(0)
+
+        result = json.loads(raw_text)
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.warning("Interactive story generation error: %s", e)
+        # Fallback response
+        friends_text = f" with {', '.join(friends)}" if friends else ""
+        return jsonify({
+            "text": f"{character}{friends_text} stood at the edge of a mysterious forest, hearing strange sounds within. The {companion if companion and companion != 'None' else 'wind'} seemed to whisper of adventure ahead.",
+            "choices": [
+                {"id": "choice1", "text": "Enter the forest bravely", "description": "Face the unknown with courage"},
+                {"id": "choice2", "text": "Look for another path", "description": "Search for a safer route"},
+                {"id": "choice3", "text": "Call out to see if anyone is there", "description": "Try to make friends first"}
+            ],
+            "is_ending": False
+        }), 200
+
+@app.route("/continue-interactive-story", methods=["POST"])
+def continue_interactive_story():
+    """Continue an interactive story based on the user's choice."""
+    payload = request.get_json(silent=True) or {}
+    character = payload.get("character", "the hero")
+    theme = payload.get("theme", "Adventure")
+    companion = payload.get("companion")
+    friends = payload.get("friends", [])
+    choice = payload.get("choice", "")
+    story_so_far = payload.get("story_so_far", "")
+    choices_made = payload.get("choices_made", [])
+    therapeutic_prompt = payload.get("therapeutic_prompt", "")
+
+    # Determine if this should be an ending (after 3-4 choices)
+    should_end = len(choices_made) >= 3
+
+    prompt_parts = [
+        "You are continuing an interactive choose-your-own-adventure story for children.",
+        f"\nCONTEXT:",
+        f"- Character: {character}",
+        f"- Theme: {theme}",
+    ]
+    if companion and companion != "None":
+        prompt_parts.append(f"- Companion: {companion}")
+    if friends:
+        prompt_parts.append(f"- Friends/Siblings in story: {', '.join(friends)}")
+
+    if therapeutic_prompt:
+        prompt_parts.extend([
+            "\nTHERAPEUTIC ELEMENTS TO WEAVE IN:",
+            therapeutic_prompt,
+        ])
+
+    prompt_parts.extend([
+        f"\nSTORY SO FAR:\n{story_so_far}",
+        f"\nLAST CHOICE MADE: {choice}",
+        f"\nCHOICES MADE SO FAR: {len(choices_made)}",
+    ])
+
+    if should_end:
+        prompt_parts.extend([
+            "\nTASK: Create the FINAL segment that brings the story to a satisfying conclusion (150-200 words).",
+            "Resolve the adventure positively and show what the character learned.",
+        ])
+        if friends:
+            prompt_parts.append(f"Show how {character} and their friends {', '.join(friends)} worked together and what they learned.")
+
+        prompt_parts.extend([
+            "\nFORMAT YOUR RESPONSE EXACTLY AS JSON:",
+            "{",
+            '  "text": "The concluding story text...",',
+            '  "choices": null,',
+            '  "is_ending": true',
+            "}",
+        ])
+    else:
+        prompt_parts.extend([
+            "\nTASK: Continue the story based on their choice (150-200 words) and present new options.",
+        ])
+        if friends:
+            prompt_parts.append(f"Include interactions with {', '.join(friends)} to show friendship and teamwork.")
+
+        prompt_parts.extend([
+            "\nFORMAT YOUR RESPONSE EXACTLY AS JSON:",
+            "{",
+            '  "text": "The continuation text here...",',
+            '  "choices": [',
+            '    {"id": "choice1", "text": "Option 1", "description": "Brief description"},',
+            '    {"id": "choice2", "text": "Option 2", "description": "Brief description"},',
+            '    {"id": "choice3", "text": "Option 3", "description": "Brief description"}',
+            '  ],',
+            '  "is_ending": false',
+            "}",
+        ])
+
+    prompt_parts.append("\nIMPORTANT: Return ONLY valid JSON. No extra text.")
+    prompt = "\n".join(prompt_parts)
+
+    try:
+        if model is None:
+            raise RuntimeError("Model unavailable")
+        response = model.generate_content(prompt)
+        raw_text = getattr(response, "text", "").strip()
+
+        # Try to extract JSON from response
+        json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        if json_match:
+            raw_text = json_match.group(0)
+
+        result = json.loads(raw_text)
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.warning("Story continuation error: %s", e)
+        # Fallback response
+        friends_text = f" and {', '.join(friends)}" if friends else ""
+        if should_end:
+            return jsonify({
+                "text": f"Thanks to their brave choices, {character}{friends_text} completed the adventure successfully and returned home with wonderful memories and new confidence!",
+                "choices": None,
+                "is_ending": True
+            }), 200
+        else:
+            return jsonify({
+                "text": f"After choosing to {choice.lower()}, {character}{friends_text} discovered something wonderful that brought them closer to solving the mystery.",
+                "choices": [
+                    {"id": "choice1", "text": "Continue forward", "description": "Keep going with determination"},
+                    {"id": "choice2", "text": "Take a moment to think", "description": "Pause and consider the situation"}
+                ],
+                "is_ending": False
+            }), 200
+
 # --- Main execution ---
 if __name__ == "__main__":
-    print("Enhanced Story Engine Starting...")
-    print("Now with advanced character development, plot structures, and companion dynamics!")
+    print("🌟 Enhanced Story Engine Starting...")
+    print("✨ Now with advanced character development, plot structures, and companion dynamics!")
     app.run(host="0.0.0.0", port=5000, debug=False)
