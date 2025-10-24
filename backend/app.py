@@ -10,12 +10,16 @@ import logging
 import random
 import re
 from datetime import datetime
+from dotenv import load_dotenv
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 import google.generativeai as genai
 from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
+
+# Load environment variables from .env file
+load_dotenv(override=True)
 
 # ----------------------
 # Flask & DB setup
@@ -277,16 +281,31 @@ def generate_story_endpoint():
     theme = payload.get("theme", "Adventure")
     companion = payload.get("companion")
     therapeutic_prompt = payload.get("therapeutic_prompt", "")
+    user_api_key = payload.get("user_api_key")  # Optional user-provided API key
+    character_age = payload.get("character_age", 7)  # For age-appropriate content
 
     prompt = story_engine.generate_enhanced_prompt(character, theme, companion, therapeutic_prompt)
+
+    # Decide which model to use
+    using_user_key = False
     try:
-        if model is None:
-            raise RuntimeError("Model unavailable")
-        response = model.generate_content(prompt)
+        if user_api_key:
+            # User provided their own API key - use it for unlimited generation
+            genai.configure(api_key=user_api_key)
+            user_model = genai.GenerativeModel(GEMINI_MODEL)
+            response = user_model.generate_content(prompt)
+            using_user_key = True
+        else:
+            # Use server's API key (free tier)
+            if model is None:
+                raise RuntimeError("Model unavailable")
+            response = model.generate_content(prompt)
+            using_user_key = False
+
         raw_text = getattr(response, "text", "")
         if not raw_text:
             raise ValueError("Empty model response")
-            
+
     except Exception as e:
         print(f"!!! API ERROR: {type(e).__name__}: {str(e)}")
         logger.warning("Model error, using fallback: %s", e)
@@ -296,9 +315,18 @@ def generate_story_endpoint():
             "facing our fears with courage and kindness.\n"
             f"[WISDOM GEM: {WisdomGems.get_wisdom(theme)}]"
         )
-        
+    finally:
+        # Reset to server API key after user's request
+        if user_api_key and api_key:
+            genai.configure(api_key=api_key)
+
     title, wisdom_gem, story_text = _safe_extract_title_and_gem(raw_text, theme)
-    return jsonify({"title": title, "story_text": story_text, "wisdom_gem": wisdom_gem}), 200
+    return jsonify({
+        "title": title,
+        "story_text": story_text,
+        "wisdom_gem": wisdom_gem,
+        "used_user_key": using_user_key  # Let client know which mode was used
+    }), 200
 
 @app.route("/create-character", methods=["POST"])
 def create_character():
@@ -661,8 +689,198 @@ def continue_interactive_story():
                 "is_ending": False
             }), 200
 
+
+@app.route("/generate-superhero", methods=["GET"])
+def generate_superhero():
+    """Generate a random superhero name, superpower, and mission."""
+    import random
+    
+    # Superhero name components
+    adjectives = ["Mighty", "Incredible", "Amazing", "Super", "Ultra", "Fantastic", "Wonder", "Stellar", "Dynamic", "Cosmic"]
+    nouns = ["Guardian", "Defender", "Champion", "Protector", "Warrior", "Hero", "Avenger", "Sentinel", "Phoenix", "Thunder"]
+    
+    # Superpowers
+    superpowers = [
+        "Super Strength", "Flight", "Invisibility", "Telekinesis", "Super Speed",
+        "Energy Blasts", "Shape Shifting", "Time Control", "Healing Powers", "Ice Powers",
+        "Fire Powers", "Lightning Control", "Mind Reading", "Force Fields", "Sonic Scream",
+        "Animal Communication", "Super Intelligence", "Elasticity", "X-Ray Vision", "Weather Control"
+    ]
+    
+    # Mission templates
+    missions = [
+        "Protect the city from villains",
+        "Save people in danger",
+        "Stop evil plans before they happen",
+        "Help those who cannot help themselves",
+        "Keep the world safe from harm",
+        "Defend the innocent and fight injustice",
+        "Use powers for good and never evil",
+        "Bring hope to those who have lost it",
+        "Stand up to bullies and protect the weak",
+        "Make the world a better place"
+    ]
+    
+    superhero_name = f"{random.choice(adjectives)} {random.choice(nouns)}"
+    superpower = random.choice(superpowers)
+    mission = random.choice(missions)
+    
+    return jsonify({
+        "superhero_name": superhero_name,
+        "superpower": superpower,
+        "mission": mission
+    }), 200
+
 # --- Main execution ---
+@app.route("/extract-story-scenes", methods=["POST"])
+def extract_story_scenes():
+    """Extract key scenes from a story for illustration."""
+    payload = request.get_json(silent=True) or {}
+    story_text = payload.get("story_text", "")
+    character_name = payload.get("character_name", "the hero")
+    num_scenes = payload.get("num_scenes", 3)
+    
+    if not story_text:
+        return jsonify({"error": "story_text is required"}), 400
+    
+    prompt = f"""
+Analyze this children's story and extract {num_scenes} key visual scenes that would make great illustrations.
+
+Story:
+{story_text}
+
+For each scene, provide:
+1. A brief title (3-5 words)
+2. A detailed visual description (2-3 sentences) focusing on what would be shown in the image
+3. The main character is: {character_name}
+
+Return ONLY valid JSON in this format:
+{{
+  "scenes": [
+    {{"title": "Scene title", "description": "Visual description here"}},
+    ...
+  ]
+}}
+
+Focus on the most visually interesting and important moments. Make descriptions child-friendly and colorful.
+"""
+    
+    try:
+        if model is None:
+            raise RuntimeError("Model unavailable")
+        
+        response = model.generate_content(prompt)
+        raw_text = getattr(response, "text", "")
+        
+        # Try to extract JSON from response
+        json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        if json_match:
+            raw_text = json_match.group(0)
+        
+        result = json.loads(raw_text)
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logger.warning("Scene extraction error: %s", e)
+        # Fallback: simple scene extraction
+        sentences = story_text.split('.')
+        scenes = []
+        step = max(1, len(sentences) // num_scenes)
+        for i in range(num_scenes):
+            idx = min(i * step, len(sentences) - 1)
+            scenes.append({
+                "title": f"Scene {i+1}",
+                "description": sentences[idx].strip() if idx < len(sentences) else ""
+            })
+        return jsonify({"scenes": scenes}), 200
+
+@app.route("/generate-coloring-prompt", methods=["POST"])
+def generate_coloring_prompt():
+    """Generate a prompt for a coloring book page."""
+    payload = request.get_json(silent=True) or {}
+    scene_description = payload.get("scene_description", "")
+    character_name = payload.get("character_name", "a child")
+    
+    if not scene_description:
+        return jsonify({"error": "scene_description is required"}), 400
+    
+    coloring_prompt = f"""
+Create a simple BLACK AND WHITE line art coloring book page for children ages 4-8.
+
+Scene: {scene_description}
+Main character: {character_name}
+
+The image should be:
+- ONLY black lines on white background (no colors, no shading, no gray)
+- Bold, clear outlines perfect for coloring
+- Simple shapes with large areas to color
+- Child-friendly and fun
+- Similar to classic Disney coloring books
+
+Describe what this coloring page would show in detail.
+"""
+    
+    return jsonify({
+        "prompt": coloring_prompt,
+        "scene": scene_description,
+        "character": character_name
+    }), 200
+
+
+@app.route("/setup-test-account", methods=["POST"])
+def setup_test_account():
+    """Create Isabella's test account with everything unlocked."""
+    # Create Isabella's character
+    isabella = Character(
+        id='isabella-test-account',
+        name='Isabella',
+        age=7,
+        gender='Girl',
+        role='Hero',
+        hair='Short brown hair with pink highlights',
+        eyes='Brown',
+        outfit='Favorite outfit',
+        challenge='Learning to read, still learning letters',
+        character_type='Everyday Kid',
+        personality_traits=['Brave', 'Curious', 'Kind', 'Determined'],
+        likes=['playing', 'adventures', 'pink things'],
+        dislikes=['being bored'],
+        fears=[],
+        strengths=['trying her best', 'being brave'],
+        goals=['learn to read', 'know all her letters'],
+        comfort_item='favorite stuffed animal',
+    )
+    
+    # Check if Isabella already exists
+    existing = db.session.get(Character, 'isabella-test-account')
+    if existing:
+        # Update existing
+        existing.name = isabella.name
+        existing.age = isabella.age
+        existing.gender = isabella.gender
+        existing.hair = isabella.hair
+        existing.challenge = isabella.challenge
+        existing.personality_traits = isabella.personality_traits
+        existing.likes = isabella.likes
+        existing.strengths = isabella.strengths
+        existing.goals = isabella.goals
+        db.session.commit()
+        return jsonify({
+            "status": "updated",
+            "character": existing.to_dict(),
+            "message": "Isabella's account updated with everything unlocked!"
+        }), 200
+    else:
+        # Create new
+        db.session.add(isabella)
+        db.session.commit()
+        return jsonify({
+            "status": "created",
+            "character": isabella.to_dict(),
+            "message": "Isabella's test account created with everything unlocked!"
+        }), 201
+
 if __name__ == "__main__":
-    print("🌟 Enhanced Story Engine Starting...")
-    print("✨ Now with advanced character development, plot structures, and companion dynamics!")
+    print("*** Enhanced Story Engine Starting...")
+    print("*** Now with advanced character development, plot structures, and companion dynamics!")
     app.run(host="0.0.0.0", port=5000, debug=False)

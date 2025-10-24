@@ -95,7 +95,7 @@ class TierLimits {
           adFree: false,
           prioritySupport: false,
           earlyAccess: false,
-          availableThemes: ['Adventure', 'Magic'],
+          availableThemes: ['Adventure', 'Magic', 'Friendship'],
           availableCompanions: ['None', 'Loyal Dog', 'Mysterious Cat'],
         );
 
