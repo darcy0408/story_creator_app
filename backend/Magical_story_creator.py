@@ -90,7 +90,7 @@ api_key = os.getenv("GEMINI_API_KEY")
 # --- DEBUG LINES START ---
 print(f"API KEY EXISTS: {bool(api_key)}")
 print(f"API KEY LENGTH: {len(api_key) if api_key else 0}")
-print(f"MODEL: {os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')}")
+print(f"MODEL: {os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')}")
 # --- DEBUG LINES END ---
 
 if not api_key:
@@ -98,7 +98,7 @@ if not api_key:
 else:
     genai.configure(api_key=api_key)
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+GEMINI_MODEL = "gemini-2.5-flash"  # Hardcoded to bypass env var issues
 try:
     model = genai.GenerativeModel(GEMINI_MODEL) if api_key else None
 except Exception as e:
@@ -411,8 +411,287 @@ def generate_multi_character_story():
 
     return jsonify({"story": story_text}), 200
 
+# ===================================================================
+# INTERACTIVE / CHOOSE-YOUR-OWN-ADVENTURE STORY ENDPOINTS
+# ===================================================================
+
+@app.route("/generate-interactive-story", methods=["POST"])
+def generate_interactive_story():
+    """
+    Generate the FIRST segment of an interactive choose-your-own-adventure story.
+    Returns: story text + 2-3 meaningful choices for the child to make
+    """
+    data = request.get_json(silent=True) or {}
+    character_name = data.get("character", "Hero")
+    theme = data.get("theme", "Adventure")
+    companion = data.get("companion", "None")
+    friends = data.get("friends", [])
+    therapeutic_prompt = data.get("therapeutic_prompt", "")
+
+    logger.info(f"Starting interactive story for {character_name}, theme={theme}")
+
+    # Build the prompt for the initial story segment
+    prompt_parts = [
+        "You are a master storyteller creating an INTERACTIVE choose-your-own-adventure story for a child.",
+        "This is the BEGINNING of the story. Create an engaging opening that sets up a meaningful choice.",
+        "",
+        f"STORY DETAILS:",
+        f"- Main character: {character_name}",
+        f"- Theme: {theme}",
+    ]
+
+    if companion and companion.lower() != "none":
+        prompt_parts.append(f"- Companion: {companion}")
+
+    if friends:
+        friend_names = ", ".join(friends)
+        prompt_parts.append(f"- Friends joining: {friend_names}")
+
+    if therapeutic_prompt:
+        prompt_parts.append(f"\nTHERAPEUTIC GOAL: {therapeutic_prompt}")
+
+    prompt_parts.extend([
+        "",
+        "INSTRUCTIONS:",
+        "1. Write an engaging story opening (3-4 paragraphs)",
+        "2. Set up a situation where the character faces an important decision",
+        "3. End with: 'What should [character name] do?'",
+        "",
+        "Then provide EXACTLY 3 choices in this format:",
+        "CHOICE 1: [description]",
+        "CHOICE 2: [description]",
+        "CHOICE 3: [description]",
+        "",
+        "Make each choice lead to different outcomes (brave, thoughtful, creative)",
+        "Keep language appropriate for children ages 5-10",
+        "Be encouraging and positive",
+        "",
+        "Begin the story now:"
+    ])
+
+    prompt = "\n".join(prompt_parts)
+
+    try:
+        if model is None:
+            raise RuntimeError("Model unavailable")
+
+        response = model.generate_content(prompt)
+        full_text = getattr(response, "text", "")
+
+        # Parse the response to extract story text and choices
+        story_text, choices = _parse_interactive_response(full_text, character_name)
+
+        result = {
+            "text": story_text,
+            "choices": choices,
+            "is_ending": False
+        }
+
+        logger.info(f"Generated interactive story start with {len(choices)} choices")
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"Interactive story generation error: {e}")
+        # Fallback
+        fallback_story = f"{character_name} stood at the edge of a magical forest. A glowing path led deeper into the trees, while a friendly bird chirped nearby, as if inviting them to follow. What should {character_name} do?"
+        fallback_choices = [
+            {"text": "Follow the glowing path into the forest"},
+            {"text": "Talk to the friendly bird first"},
+            {"text": "Look around carefully before deciding"}
+        ]
+        return jsonify({
+            "text": fallback_story,
+            "choices": fallback_choices,
+            "is_ending": False
+        }), 200
+
+
+@app.route("/continue-interactive-story", methods=["POST"])
+def continue_interactive_story():
+    """
+    Continue an interactive story based on the user's choice.
+    Tracks story history to maintain context.
+    """
+    data = request.get_json(silent=True) or {}
+    character_name = data.get("character", "Hero")
+    theme = data.get("theme", "Adventure")
+    companion = data.get("companion", "None")
+    friends = data.get("friends", [])
+    choice_made = data.get("choice", "")
+    story_so_far = data.get("story_so_far", "")
+    choices_made = data.get("choices_made", [])
+    therapeutic_prompt = data.get("therapeutic_prompt", "")
+
+    # Determine if this should be the ending
+    num_choices_made = len(choices_made)
+    is_final_segment = num_choices_made >= 2  # End after 3 choices (2 previous + this one)
+
+    logger.info(f"Continuing interactive story (choice #{num_choices_made + 1}): {choice_made[:50]}")
+
+    prompt_parts = [
+        "You are continuing an INTERACTIVE choose-your-own-adventure story for a child.",
+    ]
+
+    if is_final_segment:
+        prompt_parts.append("This is the FINAL segment. Bring the story to a satisfying and uplifting conclusion.")
+    else:
+        prompt_parts.append("Continue the story and present the next important choice.")
+
+    prompt_parts.extend([
+        "",
+        f"STORY SO FAR:",
+        story_so_far[:1500],  # Limit context size
+        "",
+        f"PREVIOUS CHOICES MADE:",
+    ])
+
+    for i, past_choice in enumerate(choices_made, 1):
+        prompt_parts.append(f"{i}. {past_choice}")
+
+    prompt_parts.extend([
+        "",
+        f"CURRENT CHOICE: {choice_made}",
+        "",
+        f"CHARACTER: {character_name}",
+        f"THEME: {theme}",
+    ])
+
+    if companion and companion.lower() != "none":
+        prompt_parts.append(f"COMPANION: {companion}")
+
+    if therapeutic_prompt:
+        prompt_parts.append(f"THERAPEUTIC GOAL: {therapeutic_prompt}")
+
+    if is_final_segment:
+        prompt_parts.extend([
+            "",
+            "INSTRUCTIONS FOR ENDING:",
+            f"1. Show the consequences of {character_name}'s choice: {choice_made}",
+            "2. Bring the story to a heartwarming, satisfying conclusion (2-3 paragraphs)",
+            "3. Include a positive message or lesson learned",
+            f"4. Make {character_name} feel proud of their choices",
+            "5. End with: 'THE END'",
+            "",
+            "Write the final part of the story now:"
+        ])
+    else:
+        prompt_parts.extend([
+            "",
+            "INSTRUCTIONS:",
+            f"1. Show what happens because of the choice: {choice_made}",
+            "2. Continue the adventure (2-3 paragraphs)",
+            "3. Present a NEW decision point",
+            "4. End with: 'What should [character name] do next?'",
+            "",
+            "Then provide EXACTLY 3 new choices in this format:",
+            "CHOICE 1: [description]",
+            "CHOICE 2: [description]",
+            "CHOICE 3: [description]",
+            "",
+            "Continue the story now:"
+        ])
+
+    prompt = "\n".join(prompt_parts)
+
+    try:
+        if model is None:
+            raise RuntimeError("Model unavailable")
+
+        response = model.generate_content(prompt)
+        full_text = getattr(response, "text", "")
+
+        if is_final_segment:
+            # Final segment - no choices, just ending
+            story_text = full_text.replace("THE END", "").strip()
+            result = {
+                "text": story_text,
+                "choices": [],
+                "is_ending": True
+            }
+        else:
+            # Continue segment - parse choices
+            story_text, choices = _parse_interactive_response(full_text, character_name)
+            result = {
+                "text": story_text,
+                "choices": choices,
+                "is_ending": False
+            }
+
+        logger.info(f"Continued interactive story (ending={is_final_segment})")
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"Continue interactive story error: {e}")
+        # Fallback
+        if is_final_segment:
+            fallback = f"And so, {character_name}'s wonderful adventure came to an end. They learned that every choice they made helped them grow braver and wiser. The End!"
+            return jsonify({
+                "text": fallback,
+                "choices": [],
+                "is_ending": True
+            }), 200
+        else:
+            fallback = f"{character_name} continued their journey. What should {character_name} do next?"
+            fallback_choices = [
+                {"text": "Keep going forward bravely"},
+                {"text": "Take a moment to think"},
+                {"text": "Ask for help from a friend"}
+            ]
+            return jsonify({
+                "text": fallback,
+                "choices": fallback_choices,
+                "is_ending": False
+            }), 200
+
+
+def _parse_interactive_response(full_text: str, character_name: str) -> tuple[str, list]:
+    """
+    Parse the AI response to extract:
+    1. Story text (everything before choices)
+    2. List of choices
+
+    Returns: (story_text, choices_list)
+    """
+    choices = []
+    story_text = full_text
+
+    # Look for choice patterns
+    import re
+
+    # Try to find choices in format "CHOICE 1:", "CHOICE 2:", etc.
+    choice_pattern = r'CHOICE \d+:\s*(.+?)(?=CHOICE \d+:|$)'
+    found_choices = re.findall(choice_pattern, full_text, re.IGNORECASE | re.DOTALL)
+
+    if found_choices:
+        # Extract story text (everything before first CHOICE)
+        story_parts = re.split(r'CHOICE \d+:', full_text, flags=re.IGNORECASE)
+        story_text = story_parts[0].strip()
+
+        # Clean up choices
+        for choice_text in found_choices:
+            cleaned = choice_text.strip().split('\n')[0]  # Take first line only
+            if cleaned:
+                choices.append({"text": cleaned})
+
+    # If we didn't find exactly 3 choices, provide defaults
+    if len(choices) != 3:
+        logger.warning(f"Expected 3 choices, found {len(choices)}, using defaults")
+        choices = [
+            {"text": "Choose the brave path"},
+            {"text": "Choose the thoughtful path"},
+            {"text": "Choose the creative path"}
+        ]
+
+    # Limit to 3 choices
+    choices = choices[:3]
+
+    return story_text, choices
+
+
 # --- Main execution ---
 if __name__ == "__main__":
     print("Enhanced Story Engine Starting...")
     print("Now with advanced character development, plot structures, and companion dynamics!")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    print("Interactive choose-your-own-adventure stories enabled!")
+    print("Auto-reload enabled - server will restart on file changes!")
+    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=True)

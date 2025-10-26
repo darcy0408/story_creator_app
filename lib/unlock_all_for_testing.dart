@@ -3,10 +3,14 @@
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'subscription_service.dart';
 
 /// Unlock all features for testing purposes
 Future<void> unlockAllFeaturesForTesting() async {
   final prefs = await SharedPreferences.getInstance();
+
+  // Activate Isabela tester profile (Family tier - all features)
+  await SubscriptionService().activateIsabelaTester();
 
   // Unlock ALL reading features
   final allFeatureIds = [
@@ -73,15 +77,28 @@ Future<void> unlockAllFeaturesForTesting() async {
 
   await prefs.setString('unlocked_items', jsonEncode(allUnlockableIds));
 
-  print('✅ ALL FEATURES UNLOCKED FOR TESTING!');
+  print('');
+  print('=' * 60);
+  print('✅ ISABELA TESTER PROFILE ACTIVATED!');
+  print('=' * 60);
+  print('');
+  print('📊 Subscription: Family Tier (ALL FEATURES)');
+  print('   - NO paywalls');
+  print('   - NO story limits');
+  print('   - NO feature restrictions');
+  print('');
+  print('🔓 Unlocked:');
   print('   - ${allFeatureIds.length} premium features');
   print('   - ${allUnlockableIds.length} character items');
   print('   - 10,000 words "read"');
   print('   - 50 stories "completed"');
   print('');
+  print('✨ Ready to test:');
   print('🎮 Interactive Stories: UNLOCKED');
   print('🦸 Superhero Creator: UNLOCKED');
   print('🎨 Story Illustrations: UNLOCKED');
   print('👥 Multi-Character Stories: UNLOCKED');
   print('🐉 Legendary Companions: UNLOCKED');
+  print('');
+  print('=' * 60);
 }

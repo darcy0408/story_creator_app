@@ -22,6 +22,7 @@ import 'coloring_book_library_screen.dart';
 import 'superhero_builder_screen.dart';
 import 'reading_unlocks_screen.dart';
 import 'emotions_screen.dart';
+import 'unlock_all_for_testing.dart';
 
 class StoryCreatorApp extends StatelessWidget {
   const StoryCreatorApp({super.key});
@@ -360,6 +361,24 @@ class _StoryScreenState extends State<StoryScreen> {
           ],
         ),
         actions: [
+          // Debug button to activate Isabela tester
+          IconButton(
+            tooltip: 'Activate Isabela Tester (Debug)',
+            icon: const Icon(Icons.science, color: Colors.amber),
+            onPressed: () async {
+              await unlockAllFeaturesForTesting();
+              await _loadSubscriptionInfo();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('✅ Isabela Tester Activated! All features unlocked.'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              }
+            },
+          ),
           // Stories remaining indicator
           if (_currentSubscription != null && !_currentSubscription!.limits.unlimitedStories)
             Padding(

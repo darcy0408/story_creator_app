@@ -203,4 +203,20 @@ class SubscriptionService {
   Future<void> resetUsageStats() async {
     await _saveUsageStats(UsageStats());
   }
+
+  /// Activate Isabela tester profile with all features unlocked
+  Future<void> activateIsabelaTester() async {
+    final testerSubscription = UserSubscription(
+      tier: SubscriptionTier.family,
+      subscriptionStartDate: DateTime.now(),
+      subscriptionEndDate: DateTime.now().add(const Duration(days: 36500)), // 100 years
+      isActive: true,
+      subscriptionId: 'isabela_tester_profile',
+    );
+
+    await setSubscription(testerSubscription);
+    await resetUsageStats();
+
+    print('Isabela tester profile activated with all features!');
+  }
 }
