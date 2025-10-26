@@ -225,6 +225,22 @@ def _as_list(v):
         return [part.strip() for part in s.split(",") if part.strip()]
     return [str(v)]
 
+def _missing_required_field(data: dict, required_fields: tuple[str, ...], list_fields: tuple[str, ...] = ()) -> str | None:
+    """Return the first required field that is missing, blank, or empty."""
+    list_fields = set(list_fields or ())
+    for field in required_fields:
+        value = data.get(field)
+        if value is None:
+            return field
+        if isinstance(value, str) and not value.strip():
+            return field
+        if field in list_fields:
+            if not isinstance(value, list) or len(value) == 0:
+                return field
+        elif isinstance(value, (list, tuple, set)) and len(value) == 0:
+            return field
+    return None
+
 # ----------------------
 # API Routes
 # ----------------------
@@ -268,9 +284,9 @@ def generate_story_endpoint():
 @app.route("/create-character", methods=["POST"])
 def create_character():
     data = request.get_json(silent=True) or {}
-    missing = [k for k in ("name", "age") if not data.get(k)]
-    if missing:
-        return jsonify({"error": f"Missing required field(s): {', '.join(missing)}"}), 400
+    missing_field = _missing_required_field(data, ("name", "age"))
+    if missing_field:
+        return jsonify({"error": f"missing field {missing_field}"}), 400
     try:
         age = int(data.get("age"))
     except (ValueError, TypeError):
@@ -362,12 +378,18 @@ def get_character(char_id: str):
 @app.route("/generate-multi-character-story", methods=["POST"])
 def generate_multi_character_story():
     data = request.get_json(silent=True) or {}
-    character_ids = data.get("character_ids", [])
-    main_character_id = data.get("main_character_id")
     theme = data.get("theme", "Friendship")
 
-    if not main_character_id or not character_ids:
-        return jsonify({"error": "main_character_id and character_ids are required"}), 400
+    missing_field = _missing_required_field(
+        data,
+        ("main_character_id", "character_ids"),
+        list_fields=("character_ids",),
+    )
+    if missing_field:
+        return jsonify({"error": f"missing field {missing_field}"}), 400
+
+    main_character_id = data.get("main_character_id")
+    character_ids = data.get("character_ids")
 
     chars = Character.query.filter(Character.id.in_(character_ids)).all()
     main_char_db = next((c for c in chars if c.id == main_character_id), None)

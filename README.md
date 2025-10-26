@@ -148,6 +148,15 @@ story_creator_app/
 
 All story endpoints accept optional `therapeutic_prompt` parameter.
 
+### Friendly Error Messages
+If a request forgets a required detail (like `name`, `age`, `main_character_id`, or `character_ids`), the backend now responds with a gentle reminder such as:
+
+```json
+{"error": "missing field name"}
+```
+
+Parents and teachers can simply add the missing detail and try again—no crashes or confusing tech jargon.
+
 ## 🎨 Therapeutic Goals Supported
 
 1. **Building Confidence** - Overcoming self-doubt
