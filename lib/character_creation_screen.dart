@@ -131,6 +131,7 @@ class _CharacterCreationScreenState extends State<CharacterCreationScreen> {
                     DropdownMenuItem(value: 'Girly Girl', child: Text('Girly Girl')),
                     DropdownMenuItem(value: 'Tomboy', child: Text('Tomboy')),
                     DropdownMenuItem(value: 'Sporty Kid', child: Text('Sporty Kid')),
+                    DropdownMenuItem(value: 'Couch Potato', child: Text('Couch Potato')),
                     DropdownMenuItem(value: 'Creative Artist', child: Text('Creative Artist')),
                     DropdownMenuItem(value: 'Young Scientist', child: Text('Young Scientist')),
                     DropdownMenuItem(value: 'Playful Puppy', child: Text('Playful Puppy')),
