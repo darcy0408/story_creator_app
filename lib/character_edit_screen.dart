@@ -19,7 +19,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   // Basic Info
   late final TextEditingController _nameController;
   late final TextEditingController _ageController;
-  late String _gender;
+  late String _characterStyle;
+  late String _isA;
 
   // Character Type
   late String _characterType;
@@ -55,7 +56,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     // Initialize with existing character data
     _nameController = TextEditingController(text: widget.character.name);
     _ageController = TextEditingController(text: widget.character.age.toString());
-    _gender = widget.character.gender ?? 'Girl';
+    _isA = widget.character.gender ?? 'Girl'; // Load existing gender as "Is a:"
+    _characterStyle = 'Regular Kid'; // Default character style
 
     _characterType = 'Everyday Kid'; // Default, will be overridden if available
 
@@ -105,7 +107,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
       final body = {
         'name': _nameController.text.trim(),
         'age': int.tryParse(_ageController.text.trim()) ?? widget.character.age,
-        'gender': _gender,
+        'gender': _isA, // Send Boy/Girl for story pronouns
+        'character_style': _characterStyle, // Character appearance/personality
         'role': role,
         'character_type': _characterType,
 
@@ -384,9 +387,9 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: DropdownButtonFormField<String>(
-                value: _gender,
+                value: _isA,
                 decoration: InputDecoration(
-                  labelText: 'Gender *',
+                  labelText: 'Is a: *',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                   filled: true,
                   fillColor: Colors.grey[50],
@@ -394,13 +397,38 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                 items: const [
                   DropdownMenuItem(value: 'Girl', child: Text('Girl')),
                   DropdownMenuItem(value: 'Boy', child: Text('Boy')),
-                  DropdownMenuItem(value: 'Nonbinary', child: Text('Nonbinary')),
-                  DropdownMenuItem(value: 'Other', child: Text('Other')),
                 ],
-                onChanged: (v) => setState(() => _gender = v ?? 'Girl'),
+                onChanged: (v) => setState(() => _isA = v ?? 'Girl'),
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          value: _characterStyle,
+          decoration: InputDecoration(
+            labelText: 'Character Style *',
+            hintText: 'Choose appearance and personality',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            filled: true,
+            fillColor: Colors.grey[50],
+            prefixIcon: const Icon(Icons.style),
+          ),
+          items: const [
+            DropdownMenuItem(value: 'Regular Kid', child: Text('Regular Kid')),
+            DropdownMenuItem(value: 'Girly Girl', child: Text('Girly Girl')),
+            DropdownMenuItem(value: 'Tomboy', child: Text('Tomboy')),
+            DropdownMenuItem(value: 'Sporty Kid', child: Text('Sporty Kid')),
+            DropdownMenuItem(value: 'Creative Artist', child: Text('Creative Artist')),
+            DropdownMenuItem(value: 'Young Scientist', child: Text('Young Scientist')),
+            DropdownMenuItem(value: 'Playful Puppy', child: Text('Playful Puppy')),
+            DropdownMenuItem(value: 'Curious Cat', child: Text('Curious Cat')),
+            DropdownMenuItem(value: 'Brave Bird', child: Text('Brave Bird')),
+            DropdownMenuItem(value: 'Gentle Bunny', child: Text('Gentle Bunny')),
+            DropdownMenuItem(value: 'Wise Fox', child: Text('Wise Fox')),
+            DropdownMenuItem(value: 'Magical Dragon', child: Text('Magical Dragon')),
+          ],
+          onChanged: (v) => setState(() => _characterStyle = v ?? 'Regular Kid'),
         ),
       ],
     );

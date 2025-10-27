@@ -24,8 +24,9 @@ class _CharacterCreationScreenState extends State<CharacterCreationScreen> {
   final _fearsController = TextEditingController();
   final _comfortItemController = TextEditingController();
 
-  // NEW: gender state
-  String _gender = 'Girl'; // default
+  // Character style and type
+  String _characterStyle = 'Regular Kid'; // default
+  String _isA = 'Girl'; // default (for story pronouns)
 
   // Helper to split comma lists safely
   List<String> _splitCSV(String text) {
@@ -44,7 +45,8 @@ class _CharacterCreationScreenState extends State<CharacterCreationScreen> {
         'name': _nameController.text.trim(),
         'age': int.tryParse(_ageController.text.trim()) ?? 0,
         'role': _roleController.text.trim().isEmpty ? 'Hero' : _roleController.text.trim(),
-        'gender': _gender, // <-- include gender
+        'gender': _isA, // Send Boy/Girl for story pronouns
+        'character_style': _characterStyle, // Character appearance/personality
         'magic_type': _magicTypeController.text.trim().isEmpty ? null : _magicTypeController.text.trim(),
         'challenge': _challengeController.text.trim().isEmpty ? null : _challengeController.text.trim(),
         'likes': _splitCSV(_likesController.text),
@@ -117,20 +119,42 @@ class _CharacterCreationScreenState extends State<CharacterCreationScreen> {
                 gap,
                 _buildTextField(controller: _ageController, label: 'Age', keyboardType: TextInputType.number),
                 gap,
-                // NEW: Gender dropdown
+                // Character Style dropdown
                 DropdownButtonFormField<String>(
-                  value: _gender,
+                  value: _characterStyle,
                   decoration: const InputDecoration(
-                    labelText: 'Gender',
+                    labelText: 'Character Style',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Regular Kid', child: Text('Regular Kid')),
+                    DropdownMenuItem(value: 'Girly Girl', child: Text('Girly Girl')),
+                    DropdownMenuItem(value: 'Tomboy', child: Text('Tomboy')),
+                    DropdownMenuItem(value: 'Sporty Kid', child: Text('Sporty Kid')),
+                    DropdownMenuItem(value: 'Creative Artist', child: Text('Creative Artist')),
+                    DropdownMenuItem(value: 'Young Scientist', child: Text('Young Scientist')),
+                    DropdownMenuItem(value: 'Playful Puppy', child: Text('Playful Puppy')),
+                    DropdownMenuItem(value: 'Curious Cat', child: Text('Curious Cat')),
+                    DropdownMenuItem(value: 'Brave Bird', child: Text('Brave Bird')),
+                    DropdownMenuItem(value: 'Gentle Bunny', child: Text('Gentle Bunny')),
+                    DropdownMenuItem(value: 'Wise Fox', child: Text('Wise Fox')),
+                    DropdownMenuItem(value: 'Magical Dragon', child: Text('Magical Dragon')),
+                  ],
+                  onChanged: (v) => setState(() => _characterStyle = v ?? 'Regular Kid'),
+                ),
+                gap,
+                // Is a: dropdown (for story language)
+                DropdownButtonFormField<String>(
+                  value: _isA,
+                  decoration: const InputDecoration(
+                    labelText: 'Is a:',
                     border: OutlineInputBorder(),
                   ),
                   items: const [
                     DropdownMenuItem(value: 'Girl', child: Text('Girl')),
                     DropdownMenuItem(value: 'Boy', child: Text('Boy')),
-                    DropdownMenuItem(value: 'Nonbinary', child: Text('Nonbinary')),
-                    DropdownMenuItem(value: 'Prefer not to say', child: Text('Prefer not to say')),
                   ],
-                  onChanged: (v) => setState(() => _gender = v ?? 'Girl'),
+                  onChanged: (v) => setState(() => _isA = v ?? 'Girl'),
                 ),
                 gap,
                 _buildTextField(controller: _roleController, label: 'Role (e.g., Prince, Explorer)'),

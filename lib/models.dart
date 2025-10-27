@@ -5,6 +5,7 @@ class Character {
   final int age;
   final String role;
   final String? gender;
+  final String? characterStyle;
   final String? magicType;
   final String? challenge;
   final List<String>? likes;
@@ -20,6 +21,7 @@ class Character {
     required this.age,
     required this.role,
     this.gender,
+    this.characterStyle,
     this.magicType,
     this.challenge,
     this.likes,
@@ -37,6 +39,7 @@ class Character {
       age: json['age'] ?? 0,
       role: json['role'] ?? 'Hero',
       gender: json['gender'],
+      characterStyle: json['character_style'],
       magicType: json['magic_type'],
       challenge: json['challenge'],
       likes: json['likes'] != null ? List<String>.from(json['likes']) : null,
@@ -54,6 +57,7 @@ class Character {
         'age': age,
         'role': role,
         'gender': gender,
+        'character_style': characterStyle,
         'magic_type': magicType,
         'challenge': challenge,
         'likes': likes,
