@@ -32,7 +32,13 @@ class StoryCreatorApp extends StatelessWidget {
     return MaterialApp(
       title: 'Story Creator',
       theme: ThemeData(
-        primarySwatch: Colors.deepPurple,
+        primarySwatch: Colors.green,
+        primaryColor: const Color(0xFF2E7D32), // Dark jungle green
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF4CAF50),
+          primary: const Color(0xFF2E7D32),
+          secondary: const Color(0xFF81C784),
+        ),
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
       home: const StoryScreen(),
@@ -512,11 +518,24 @@ class _StoryScreenState extends State<StoryScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              const Color(0xFF81C784), // Light green
+              const Color(0xFF66BB6A), // Medium green
+              const Color(0xFF4CAF50), // Vibrant green
+              const Color(0xFFAED581), // Light lime green
+            ],
+          ),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             _buildSectionCard('Choose Main Character', _buildCharacterSelector()),
             const SizedBox(height: 20),
             if (_selectedCharacter != null)
@@ -545,22 +564,64 @@ class _StoryScreenState extends State<StoryScreen> {
           ],
         ),
       ),
+        ),
     );
   }
 
   Card _buildSectionCard(String title, Widget content) {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            content,
-          ],
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      color: Colors.white.withOpacity(0.95), // Semi-transparent white
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFF81C784).withOpacity(0.5), // Light green border
+            width: 2,
+          ),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withOpacity(0.95),
+              const Color(0xFFF1F8E9).withOpacity(0.95), // Very light green tint
+            ],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4CAF50).withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Text('🍃', style: TextStyle(fontSize: 18)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2E7D32), // Dark green text
+                      ),
+                    ),
+                  ),
+                  const Text('🌿', style: TextStyle(fontSize: 16)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              content,
+            ],
+          ),
         ),
       ),
     );
@@ -667,37 +728,77 @@ class _StoryScreenState extends State<StoryScreen> {
   }
 
   Widget _buildCharacterAvatar(Character character, {double size = 40}) {
-    // Create a simple avatar based on character properties
-    final ageGroup = character.age < 10 ? 'child' : character.age < 18 ? 'teen' : 'adult';
-    final hairColor = character.hair ?? 'brown';
-    final eyeColor = character.eyes ?? 'brown';
-
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            _getAvatarColor(character),
-            _getAvatarColor(character).withOpacity(0.7),
-          ],
-        ),
+        color: _getSkinToneColor(character),
         border: Border.all(color: Colors.white, width: 2),
-      ),
-      child: Center(
-        child: Text(
-          character.name.isNotEmpty ? character.name[0].toUpperCase() : '?',
-          style: TextStyle(
-            fontSize: size * 0.5,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
+        ],
+      ),
+      child: CustomPaint(
+        painter: _CharacterAvatarPainter(
+          hairColor: _getHairColor(character.hair),
+          eyeColor: _getEyeColor(character.eyes),
+          skinTone: _getSkinToneColor(character),
+          age: character.age,
+          gender: character.gender,
         ),
       ),
     );
+  }
+
+  Color _getSkinToneColor(Character character) {
+    // Generate different skin tones based on character ID for variety
+    final tones = [
+      const Color(0xFFFFDBAC), // Light
+      const Color(0xFFF1C27D), // Tan
+      const Color(0xFFE0AC69), // Medium
+      const Color(0xFFC68642), // Brown
+      const Color(0xFF8D5524), // Dark brown
+    ];
+    final hash = character.id.hashCode;
+    return tones[hash.abs() % tones.length];
+  }
+
+  Color _getHairColor(String? hair) {
+    if (hair == null) return Colors.brown.shade800;
+
+    final hairLower = hair.toLowerCase();
+    if (hairLower.contains('blond') || hairLower.contains('yellow')) return Colors.amber.shade700;
+    if (hairLower.contains('black')) return Colors.black;
+    if (hairLower.contains('brown')) return Colors.brown.shade800;
+    if (hairLower.contains('red') || hairLower.contains('ginger')) return Colors.red.shade900;
+    if (hairLower.contains('auburn')) return const Color(0xFF8B4513);
+    if (hairLower.contains('white') || hairLower.contains('gray') || hairLower.contains('grey')) return Colors.grey.shade300;
+    if (hairLower.contains('pink')) return Colors.pink.shade300;
+    if (hairLower.contains('blue')) return Colors.blue.shade400;
+    if (hairLower.contains('green')) return Colors.green.shade400;
+    if (hairLower.contains('purple')) return Colors.purple.shade400;
+
+    return Colors.brown.shade800; // Default
+  }
+
+  Color _getEyeColor(String? eyes) {
+    if (eyes == null) return Colors.brown.shade700;
+
+    final eyesLower = eyes.toLowerCase();
+    if (eyesLower.contains('blue')) return Colors.blue.shade700;
+    if (eyesLower.contains('green')) return Colors.green.shade700;
+    if (eyesLower.contains('brown')) return Colors.brown.shade700;
+    if (eyesLower.contains('hazel')) return const Color(0xFF8E7618);
+    if (eyesLower.contains('amber') || eyesLower.contains('gold')) return Colors.amber.shade800;
+    if (eyesLower.contains('gray') || eyesLower.contains('grey')) return Colors.grey.shade600;
+    if (eyesLower.contains('purple') || eyesLower.contains('violet')) return Colors.purple.shade700;
+
+    return Colors.brown.shade700; // Default
   }
 
   Color _getAvatarColor(Character character) {
@@ -995,7 +1096,7 @@ class _StoryScreenState extends State<StoryScreen> {
             style: const TextStyle(fontSize: 12),
           ),
           value: _isInteractiveMode,
-          activeColor: Colors.deepPurple,
+          activeColor: const Color(0xFF4CAF50), // Jungle green
           onChanged: (value) {
             setState(() => _isInteractiveMode = value);
           },
@@ -1005,14 +1106,14 @@ class _StoryScreenState extends State<StoryScreen> {
             padding: const EdgeInsets.only(left: 16.0, top: 8.0),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, size: 18, color: Colors.deepPurple),
+                const Icon(Icons.info_outline, size: 18, color: Color(0xFF2E7D32)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'You\'ll make choices that change how the story unfolds!',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 13,
-                      color: Colors.deepPurple.shade700,
+                      color: Color(0xFF2E7D32), // Dark jungle green
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -1140,5 +1241,89 @@ class _StoryScreenState extends State<StoryScreen> {
         ),
       ),
     );
+  }
+}
+
+// Custom painter for character avatars
+class _CharacterAvatarPainter extends CustomPainter {
+  final Color hairColor;
+  final Color eyeColor;
+  final Color skinTone;
+  final int age;
+  final String? gender;
+
+  _CharacterAvatarPainter({
+    required this.hairColor,
+    required this.eyeColor,
+    required this.skinTone,
+    required this.age,
+    this.gender,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    // Draw hair (top half of circle)
+    final hairPaint = Paint()
+      ..color = hairColor
+      ..style = PaintingStyle.fill;
+
+    // Hair as arc on top
+    final hairPath = Path();
+    hairPath.addArc(
+      Rect.fromCircle(center: center, radius: radius * 0.9),
+      -3.14159 * 0.8, // Start angle (top left)
+      3.14159 * 1.6,  // Sweep angle (across top)
+    );
+    canvas.drawPath(hairPath, hairPaint);
+
+    // Draw eyes
+    final eyePaint = Paint()
+      ..color = eyeColor
+      ..style = PaintingStyle.fill;
+
+    final leftEyeCenter = Offset(center.dx - radius * 0.3, center.dy - radius * 0.1);
+    final rightEyeCenter = Offset(center.dx + radius * 0.3, center.dy - radius * 0.1);
+    final eyeRadius = radius * 0.15;
+
+    // Eye whites
+    final eyeWhitePaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(leftEyeCenter, eyeRadius, eyeWhitePaint);
+    canvas.drawCircle(rightEyeCenter, eyeRadius, eyeWhitePaint);
+
+    // Pupils
+    canvas.drawCircle(leftEyeCenter, eyeRadius * 0.6, eyePaint);
+    canvas.drawCircle(rightEyeCenter, eyeRadius * 0.6, eyePaint);
+
+    // Draw smile
+    final smilePaint = Paint()
+      ..color = Colors.brown.shade800
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = radius * 0.08
+      ..strokeCap = StrokeCap.round;
+
+    final smilePath = Path();
+    smilePath.addArc(
+      Rect.fromCenter(
+        center: Offset(center.dx, center.dy + radius * 0.2),
+        width: radius * 0.8,
+        height: radius * 0.6,
+      ),
+      0,
+      3.14159,
+    );
+    canvas.drawPath(smilePath, smilePaint);
+  }
+
+  @override
+  bool shouldRepaint(_CharacterAvatarPainter oldDelegate) {
+    return hairColor != oldDelegate.hairColor ||
+        eyeColor != oldDelegate.eyeColor ||
+        skinTone != oldDelegate.skinTone;
   }
 }
