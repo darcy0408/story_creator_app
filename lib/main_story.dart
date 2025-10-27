@@ -571,12 +571,36 @@ class _StoryScreenState extends State<StoryScreen> {
       spacing: 8.0,
       runSpacing: 8.0,
       children: [
-        ..._characters.map((c) => ChoiceChip(
-              label: Text(c.name),
-              selected: _selectedCharacter?.id == c.id,
-              onSelected: (isSelected) {
-                setState(() => _selectedCharacter = isSelected ? c : null);
-              },
+        ..._characters.map((c) => Stack(
+              clipBehavior: Clip.none,
+              children: [
+                ChoiceChip(
+                  label: Text(c.name),
+                  selected: _selectedCharacter?.id == c.id,
+                  onSelected: (isSelected) {
+                    setState(() => _selectedCharacter = isSelected ? c : null);
+                  },
+                ),
+                Positioned(
+                  right: -8,
+                  top: -8,
+                  child: GestureDetector(
+                    onTap: () => _deleteCharacter(c.id, c.name),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             )),
         IconButton(
           icon: const Icon(Icons.add_circle, color: Colors.deepPurple),
@@ -590,6 +614,59 @@ class _StoryScreenState extends State<StoryScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _deleteCharacter(String characterId, String characterName) async {
+    // Confirm deletion
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Character'),
+        content: Text('Are you sure you want to delete $characterName?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // Delete from backend
+    try {
+      final response = await http.delete(
+        Uri.parse('http://127.0.0.1:5000/delete-character/$characterId'),
+      );
+
+      if (response.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$characterName deleted successfully')),
+          );
+        }
+        // Reload characters
+        await _loadCharacters();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to delete character')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error deleting character')),
+        );
+      }
+    }
   }
 
   Widget _buildThemeSelector() {
