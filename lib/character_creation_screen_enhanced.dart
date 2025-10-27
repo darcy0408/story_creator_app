@@ -387,15 +387,12 @@ class _CharacterCreationScreenEnhancedState extends State<CharacterCreationScree
   }
 
   void _generateRandomSuperhero() {
-    print('🎲 Generating random superhero...');
     final idea = SuperheroNameGenerator.generateCompleteIdea();
-    print('Generated: ${idea.name}, ${idea.powerTheme}');
     setState(() {
       _superheroNameController.text = idea.name;
       _superpowerController.text = idea.powerTheme;
       _missionController.text = 'Protecting through ${idea.powerTheme.toLowerCase()}';
     });
-    print('Text fields updated!');
   }
 
   Widget _buildSuperheroSection() {
