@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'models.dart';
+import 'superhero_name_generator.dart';
 
 class CharacterEditScreen extends StatefulWidget {
   final Character character;
@@ -484,11 +485,39 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
     );
   }
 
+  void _generateRandomSuperhero() {
+    final idea = SuperheroNameGenerator.generateCompleteIdea();
+    setState(() {
+      _superheroNameController.text = idea.name;
+      _superpowerController.text = idea.powerTheme;
+      _missionController.text = 'Protecting through ${idea.powerTheme.toLowerCase()}';
+    });
+  }
+
   Widget _buildSuperheroSection() {
     return _buildSectionCard(
       'Superhero Details',
       Icons.flash_on,
       [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Generate random ideas:',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            ElevatedButton.icon(
+              onPressed: _generateRandomSuperhero,
+              icon: const Icon(Icons.casino, size: 20),
+              label: const Text('Random'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purple,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         TextFormField(
           controller: _superheroNameController,
           decoration: InputDecoration(
