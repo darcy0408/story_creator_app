@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'superhero_builder.dart';
+import 'superhero_name_generator.dart';
 
 class SuperheroBuilderScreen extends StatefulWidget {
   const SuperheroBuilderScreen({super.key});
@@ -37,6 +38,52 @@ class _SuperheroBuilderScreenState extends State<SuperheroBuilderScreen> {
     });
   }
 
+  Future<void> _showNameIdeasDialog(TextEditingController controller) async {
+    final ideas = SuperheroNameGenerator.generateNameOptions(count: 5);
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.lightbulb, color: Colors.amber),
+            SizedBox(width: 8),
+            Text('Superhero Name Ideas'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: ideas.map((name) {
+              return ListTile(
+                leading: const Icon(Icons.stars, color: Colors.amber),
+                title: Text(name),
+                onTap: () {
+                  controller.text = name;
+                  Navigator.pop(context);
+                },
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _showNameIdeasDialog(controller);
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('More Ideas'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showCreateSuperheroDialog() async {
     final nameController = TextEditingController();
     final identityController = TextEditingController();
@@ -54,12 +101,59 @@ class _SuperheroBuilderScreenState extends State<SuperheroBuilderScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Superhero Name',
-                    hintText: 'The Amazing Reader',
+                // Need Inspiration Box
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.purple.shade200),
                   ),
+                  child: Column(
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.lightbulb, color: Colors.amber, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Need inspiration?',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Let AI suggest creative superhero names!',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Superhero Name',
+                          hintText: 'The Amazing Reader',
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.casino, color: Colors.purple),
+                      tooltip: 'Generate name ideas',
+                      onPressed: () => _showNameIdeasDialog(nameController),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 TextField(
