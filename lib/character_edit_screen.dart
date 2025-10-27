@@ -486,12 +486,15 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
   }
 
   void _generateRandomSuperhero() {
+    print('🎲 Generating random superhero...');
     final idea = SuperheroNameGenerator.generateCompleteIdea();
+    print('Generated: ${idea.name}, ${idea.powerTheme}');
     setState(() {
       _superheroNameController.text = idea.name;
       _superpowerController.text = idea.powerTheme;
       _missionController.text = 'Protecting through ${idea.powerTheme.toLowerCase()}';
     });
+    print('Text fields updated!');
   }
 
   Widget _buildSuperheroSection() {
@@ -581,6 +584,9 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                   DropdownMenuItem(value: 'Red', child: Text('Red')),
                   DropdownMenuItem(value: 'Auburn', child: Text('Auburn')),
                   DropdownMenuItem(value: 'Gray', child: Text('Gray')),
+                  DropdownMenuItem(value: 'Silver', child: Text('Silver')),
+                  DropdownMenuItem(value: 'Gold', child: Text('Gold')),
+                  DropdownMenuItem(value: 'Bronze', child: Text('Bronze')),
                   DropdownMenuItem(value: 'Colorful', child: Text('Colorful (Rainbow/Fantasy)')),
                 ],
                 onChanged: (v) => setState(() => _hairColor = v ?? 'Brown'),
@@ -603,6 +609,8 @@ class _CharacterEditScreenState extends State<CharacterEditScreen> {
                   DropdownMenuItem(value: 'Hazel', child: Text('Hazel')),
                   DropdownMenuItem(value: 'Gray', child: Text('Gray')),
                   DropdownMenuItem(value: 'Amber', child: Text('Amber')),
+                  DropdownMenuItem(value: 'Silver', child: Text('Silver')),
+                  DropdownMenuItem(value: 'Gold', child: Text('Gold')),
                 ],
                 onChanged: (v) => setState(() => _eyeColor = v ?? 'Brown'),
               ),
