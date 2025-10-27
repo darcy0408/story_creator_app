@@ -568,51 +568,179 @@ class _StoryScreenState extends State<StoryScreen> {
 
   Widget _buildCharacterSelector() {
     return Wrap(
-      spacing: 8.0,
-      runSpacing: 8.0,
+      spacing: 12.0,
+      runSpacing: 12.0,
       children: [
-        ..._characters.map((c) => Stack(
-              clipBehavior: Clip.none,
-              children: [
-                ChoiceChip(
-                  label: Text(c.name),
-                  selected: _selectedCharacter?.id == c.id,
-                  onSelected: (isSelected) {
-                    setState(() => _selectedCharacter = isSelected ? c : null);
-                  },
-                ),
-                Positioned(
-                  right: -8,
-                  top: -8,
-                  child: GestureDetector(
-                    onTap: () => _deleteCharacter(c.id, c.name),
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.close,
-                        size: 16,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            )),
-        IconButton(
-          icon: const Icon(Icons.add_circle, color: Colors.deepPurple),
-          tooltip: 'Add character',
-          onPressed: () async {
-            await Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const CharacterCreationScreenEnhanced()),
-            );
-            _loadCharacters();
-          },
-        ),
+        ..._characters.map((c) => _buildCharacterCard(c)),
+        _buildAddCharacterCard(),
       ],
+    );
+  }
+
+  Widget _buildCharacterCard(Character character) {
+    final isSelected = _selectedCharacter?.id == character.id;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() => _selectedCharacter = character);
+      },
+      onLongPress: () => _editCharacter(character),
+      child: Container(
+        width: 80,
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: isSelected ? Colors.deepPurple : Colors.grey.shade300,
+            width: isSelected ? 3 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          color: isSelected ? Colors.deepPurple.shade50 : Colors.white,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            _buildCharacterAvatar(character, size: 50),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                character.name,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? Colors.deepPurple : Colors.black87,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddCharacterCard() {
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const CharacterCreationScreenEnhanced()),
+        );
+        _loadCharacters();
+      },
+      child: Container(
+        width: 80,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.deepPurple, width: 2, style: BorderStyle.solid),
+          borderRadius: BorderRadius.circular(12),
+          color: Colors.deepPurple.shade50,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: Colors.deepPurple.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.add, size: 30, color: Colors.deepPurple),
+            ),
+            const SizedBox(height: 4),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                'Add\nCharacter',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCharacterAvatar(Character character, {double size = 40}) {
+    // Create a simple avatar based on character properties
+    final ageGroup = character.age < 10 ? 'child' : character.age < 18 ? 'teen' : 'adult';
+    final hairColor = character.hair ?? 'brown';
+    final eyeColor = character.eyes ?? 'brown';
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            _getAvatarColor(character),
+            _getAvatarColor(character).withOpacity(0.7),
+          ],
+        ),
+        border: Border.all(color: Colors.white, width: 2),
+      ),
+      child: Center(
+        child: Text(
+          character.name.isNotEmpty ? character.name[0].toUpperCase() : '?',
+          style: TextStyle(
+            fontSize: size * 0.5,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _getAvatarColor(Character character) {
+    // Generate color based on character properties
+    final colors = [
+      Colors.purple,
+      Colors.blue,
+      Colors.green,
+      Colors.orange,
+      Colors.pink,
+      Colors.teal,
+      Colors.indigo,
+      Colors.amber,
+    ];
+
+    // Use character ID to consistently pick a color
+    final hash = character.id.hashCode;
+    return colors[hash.abs() % colors.length];
+  }
+
+  Future<void> _editCharacter(Character character) async {
+    // TODO: Navigate to edit screen with delete option
+    // For now, show a dialog
+    final shouldEdit = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit ${character.name}'),
+        content: const Text('Character editing coming soon! You can change hair, outfit, and delete characters here.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(context).pop(true);
+              await _deleteCharacter(character.id, character.name);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -622,7 +750,7 @@ class _StoryScreenState extends State<StoryScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Character'),
-        content: Text('Are you sure you want to delete $characterName?'),
+        content: Text('Are you sure you want to delete $characterName? This cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -777,27 +905,75 @@ class _StoryScreenState extends State<StoryScreen> {
     }
 
     return Wrap(
-      spacing: 8.0,
-      runSpacing: 8.0,
+      spacing: 12.0,
+      runSpacing: 12.0,
       children: availableCharacters.map((c) {
         final isSelected = _additionalCharacterIds.contains(c.id);
-        return FilterChip(
-          label: Text(c.name),
-          selected: isSelected,
-          onSelected: (selected) {
+        return GestureDetector(
+          onTap: () {
             setState(() {
-              if (selected) {
-                _additionalCharacterIds.add(c.id);
-              } else {
+              if (isSelected) {
                 _additionalCharacterIds.remove(c.id);
+              } else {
+                _additionalCharacterIds.add(c.id);
               }
             });
           },
-          selectedColor: Colors.deepPurple.shade100,
-          checkmarkColor: Colors.deepPurple,
-          avatar: isSelected
-              ? const Icon(Icons.people, size: 18)
-              : null,
+          child: Container(
+            width: 70,
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: isSelected ? Colors.green : Colors.grey.shade300,
+                width: isSelected ? 3 : 1,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              color: isSelected ? Colors.green.shade50 : Colors.white,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                Stack(
+                  children: [
+                    _buildCharacterAvatar(c, size: 45),
+                    if (isSelected)
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.check,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    c.name,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected ? Colors.green.shade700 : Colors.black87,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
         );
       }).toList(),
     );
