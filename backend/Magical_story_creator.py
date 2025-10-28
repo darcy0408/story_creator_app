@@ -16,6 +16,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 import google.generativeai as genai
 from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
+from gemini_image_generator import GeminiImageGenerator
 
 # ----------------------
 # Flask & DB setup
@@ -104,6 +105,13 @@ try:
 except Exception as e:
     logger.exception("Failed to initialize Gemini model: %s", e)
     model = None
+
+# Initialize image generator
+try:
+    image_generator = GeminiImageGenerator(api_key=api_key) if api_key else None
+except Exception as e:
+    logger.exception("Failed to initialize image generator: %s", e)
+    image_generator = None
 
 # ----------------------
 # Story components
@@ -358,6 +366,46 @@ def get_character(char_id: str):
     if not char:
         return jsonify({"error": "Character not found"}), 404
     return jsonify(char.to_dict()), 200
+
+@app.route("/characters/<string:char_id>/generate-avatar", methods=["POST"])
+def generate_character_avatar(char_id: str):
+    """Generate AI avatar/portrait for a character"""
+    char = db.session.get(Character, char_id)
+    if not char:
+        return jsonify({"error": "Character not found"}), 404
+
+    if not image_generator:
+        return jsonify({"error": "Image generation not available - API key not configured"}), 503
+
+    try:
+        # Get character data as dict
+        char_data = char.to_dict()
+
+        # Generate avatar
+        logger.info(f"Generating avatar for character: {char.name}")
+        images = image_generator.generate_character_avatar(
+            character_data=char_data,
+            num_images=1
+        )
+
+        if not images:
+            return jsonify({"error": "Failed to generate avatar"}), 500
+
+        # Return the generated avatar data
+        avatar = images[0]
+        return jsonify({
+            "character_id": char_id,
+            "character_name": char.name,
+            "avatar": {
+                "image_data": avatar['image_data'],
+                "format": avatar['format'],
+                "generated_at": avatar['generated_at']
+            }
+        }), 200
+
+    except Exception as e:
+        logger.exception(f"Error generating avatar: {e}")
+        return jsonify({"error": f"Failed to generate avatar: {str(e)}"}), 500
 
 @app.route("/generate-multi-character-story", methods=["POST"])
 def generate_multi_character_story():
