@@ -23,6 +23,7 @@ import 'superhero_builder_screen.dart';
 import 'reading_unlocks_screen.dart';
 import 'emotions_screen.dart';
 import 'unlock_all_for_testing.dart';
+import 'custom_story_settings_screen.dart';
 
 class StoryCreatorApp extends StatelessWidget {
   const StoryCreatorApp({super.key});
@@ -68,6 +69,7 @@ class _StoryScreenState extends State<StoryScreen> {
   UserSubscription? _currentSubscription;
   int _remainingStoriesToday = 0;
   TherapeuticStoryCustomization? _therapeuticCustomization;
+  CustomStorySettings? _customStorySettings;
 
   final List<Map<String, String>> _companions = const [
     {'name': 'None', 'image': 'assets/images/none.png'},
@@ -240,21 +242,32 @@ class _StoryScreenState extends State<StoryScreen> {
         ? 'http://127.0.0.1:5000/generate-story'
         : 'http://127.0.0.1:5000/generate-multi-character-story';
 
+    // Build custom settings prompt if any
+    String? customPrompt;
+    if (_therapeuticCustomization != null || (_customStorySettings != null && !_customStorySettings!.isEmpty)) {
+      final parts = <String>[];
+      if (_therapeuticCustomization != null) {
+        parts.add(_therapeuticCustomization!.toPromptAddition());
+      }
+      if (_customStorySettings != null && !_customStorySettings!.isEmpty) {
+        parts.add(_customStorySettings!.toPromptAddition());
+      }
+      customPrompt = parts.join(' ');
+    }
+
     final Map<String, dynamic> requestBody = _additionalCharacterIds.isEmpty
         ? {
             'character': _selectedCharacter!.name,
             'theme': _selectedTheme,
             'companion': _selectedCompanion,
-            if (_therapeuticCustomization != null)
-              'therapeutic_prompt': _therapeuticCustomization!.toPromptAddition(),
+            if (customPrompt != null) 'therapeutic_prompt': customPrompt,
           }
         : {
             'character_ids': [_selectedCharacter!.id, ..._additionalCharacterIds.toList()],
             'main_character_id': _selectedCharacter!.id,
             'theme': _selectedTheme,
             'companion': _selectedCompanion,
-            if (_therapeuticCustomization != null)
-              'therapeutic_prompt': _therapeuticCustomization!.toPromptAddition(),
+            if (customPrompt != null) 'therapeutic_prompt': customPrompt,
           };
 
     try {
@@ -550,6 +563,9 @@ class _StoryScreenState extends State<StoryScreen> {
             const SizedBox(height: 20),
             // Therapeutic Customization
             _buildTherapeuticCard(),
+            const SizedBox(height: 20),
+            // Custom Story Settings
+            _buildCustomStorySettingsCard(),
             const SizedBox(height: 40),
             _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -1234,6 +1250,118 @@ class _StoryScreenState extends State<StoryScreen> {
               label: Text(_therapeuticCustomization != null ? 'Edit Customization' : 'Customize Story'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.deepPurple,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCustomStorySettingsCard() {
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.blue.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.map, color: Colors.blue.shade700, size: 28),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Custom Story Settings',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Make stories extra special by adding real places, pets, friends, or family members!',
+              style: TextStyle(fontSize: 14),
+            ),
+            if (_customStorySettings != null && !_customStorySettings!.isEmpty) ...[
+              const SizedBox(height: 12),
+              if (_customStorySettings!.locations.isNotEmpty) ...[
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _customStorySettings!.locations.map((location) {
+                    return Chip(
+                      avatar: Icon(Icons.place, size: 16, color: Colors.green.shade700),
+                      label: Text(location.name),
+                      backgroundColor: Colors.green.shade100,
+                      deleteIcon: const Icon(Icons.close, size: 16),
+                      onDeleted: () {
+                        setState(() {
+                          final locations = List<CustomLocation>.from(_customStorySettings!.locations);
+                          locations.remove(location);
+                          _customStorySettings = CustomStorySettings(
+                            locations: locations,
+                            sideCharacters: _customStorySettings!.sideCharacters,
+                          );
+                          if (_customStorySettings!.isEmpty) {
+                            _customStorySettings = null;
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ],
+              if (_customStorySettings!.sideCharacters.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _customStorySettings!.sideCharacters.map((character) {
+                    return Chip(
+                      avatar: Icon(Icons.person, size: 16, color: Colors.orange.shade700),
+                      label: Text(character.name),
+                      backgroundColor: Colors.orange.shade100,
+                      deleteIcon: const Icon(Icons.close, size: 16),
+                      onDeleted: () {
+                        setState(() {
+                          final characters = List<SideCharacter>.from(_customStorySettings!.sideCharacters);
+                          characters.remove(character);
+                          _customStorySettings = CustomStorySettings(
+                            locations: _customStorySettings!.locations,
+                            sideCharacters: characters,
+                          );
+                          if (_customStorySettings!.isEmpty) {
+                            _customStorySettings = null;
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ],
+            ],
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final settings = await Navigator.of(context).push<CustomStorySettings>(
+                  MaterialPageRoute(
+                    builder: (_) => CustomStorySettingsScreen(
+                      initialSettings: _customStorySettings,
+                    ),
+                  ),
+                );
+                if (settings != null && mounted) {
+                  setState(() => _customStorySettings = settings.isEmpty ? null : settings);
+                }
+              },
+              icon: Icon(_customStorySettings != null ? Icons.edit : Icons.add),
+              label: Text(_customStorySettings != null ? 'Edit Settings' : 'Add Custom Settings'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade600,
                 foregroundColor: Colors.white,
               ),
             ),

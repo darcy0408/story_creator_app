@@ -205,3 +205,110 @@ class StorySegment {
         'is_ending': isEnding,
       };
 }
+
+// ---------------------
+// CUSTOM STORY SETTINGS
+// ---------------------
+class CustomLocation {
+  final String name;
+  final String type; // 'school', 'home', 'park', 'other'
+  final String? description;
+
+  CustomLocation({
+    required this.name,
+    required this.type,
+    this.description,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'type': type,
+        if (description != null) 'description': description,
+      };
+
+  factory CustomLocation.fromJson(Map<String, dynamic> json) {
+    return CustomLocation(
+      name: json['name'] ?? '',
+      type: json['type'] ?? 'other',
+      description: json['description'],
+    );
+  }
+}
+
+class SideCharacter {
+  final String name;
+  final String relationship; // 'pet', 'sibling', 'friend', 'family', 'other'
+  final String? description;
+
+  SideCharacter({
+    required this.name,
+    required this.relationship,
+    this.description,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'relationship': relationship,
+        if (description != null) 'description': description,
+      };
+
+  factory SideCharacter.fromJson(Map<String, dynamic> json) {
+    return SideCharacter(
+      name: json['name'] ?? '',
+      relationship: json['relationship'] ?? 'other',
+      description: json['description'],
+    );
+  }
+}
+
+class CustomStorySettings {
+  final List<CustomLocation> locations;
+  final List<SideCharacter> sideCharacters;
+
+  CustomStorySettings({
+    this.locations = const [],
+    this.sideCharacters = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+        'locations': locations.map((l) => l.toJson()).toList(),
+        'side_characters': sideCharacters.map((s) => s.toJson()).toList(),
+      };
+
+  factory CustomStorySettings.fromJson(Map<String, dynamic> json) {
+    return CustomStorySettings(
+      locations: (json['locations'] as List<dynamic>?)
+              ?.map((l) => CustomLocation.fromJson(l))
+              .toList() ??
+          [],
+      sideCharacters: (json['side_characters'] as List<dynamic>?)
+              ?.map((s) => SideCharacter.fromJson(s))
+              .toList() ??
+          [],
+    );
+  }
+
+  String toPromptAddition() {
+    final parts = <String>[];
+
+    if (locations.isNotEmpty) {
+      final locationText = locations.map((l) {
+        final desc = l.description != null ? ' (${l.description})' : '';
+        return '${l.name}$desc';
+      }).join(', ');
+      parts.add('The story takes place at: $locationText.');
+    }
+
+    if (sideCharacters.isNotEmpty) {
+      final characterText = sideCharacters.map((s) {
+        final desc = s.description != null ? ' (${s.description})' : '';
+        return '${s.name}, their ${s.relationship}$desc';
+      }).join(', ');
+      parts.add('Include these characters in the story: $characterText.');
+    }
+
+    return parts.join(' ');
+  }
+
+  bool get isEmpty => locations.isEmpty && sideCharacters.isEmpty;
+}
