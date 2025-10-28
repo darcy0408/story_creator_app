@@ -8,6 +8,7 @@ import 'storage_service.dart';
 import 'adventure_progress_service.dart';
 import 'celebration_dialog.dart';
 import 'therapeutic_models.dart';
+import 'tappable_story_text.dart';
 
 class InteractiveStoryScreen extends StatefulWidget {
   final String title;
@@ -275,22 +276,16 @@ class _InteractiveStoryScreenState extends State<InteractiveStoryScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Current segment
+                  // Current segment with word learning
                   if (_currentSegment != null) ...[
-                    Card(
-                      elevation: 2,
-                      color: Colors.purple.shade50,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Text(
-                          _currentSegment!.text,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            height: 1.5,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                    TappableStoryCard(
+                      text: _currentSegment!.text,
+                      textStyle: const TextStyle(
+                        fontSize: 18,
+                        height: 1.5,
+                        fontWeight: FontWeight.w500,
                       ),
+                      backgroundColor: Colors.purple.shade50,
                     ),
                     const SizedBox(height: 24),
 
@@ -324,8 +319,8 @@ class _InteractiveStoryScreenState extends State<InteractiveStoryScreen> {
       ..._storyHistory.sublist(0, _storyHistory.length - 1).map((segment) =>
         Padding(
           padding: const EdgeInsets.only(bottom: 12.0),
-          child: Text(
-            segment,
+          child: TappableStoryText(
+            text: segment,
             style: const TextStyle(
               fontSize: 16,
               height: 1.5,

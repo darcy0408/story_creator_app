@@ -1,6 +1,8 @@
 // lib/story_result_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'story_reader_screen.dart';
 import 'storage_service.dart';
 import 'adventure_progress_service.dart';
@@ -12,6 +14,8 @@ import 'illustrated_story_viewer.dart';
 import 'coloring_book_service.dart';
 import 'character_appearance.dart';
 import 'coloring_book_library_screen.dart';
+import 'tappable_story_text.dart';
+import 'models.dart';
 
 class StoryResultScreen extends StatefulWidget {
   final String title;
@@ -21,6 +25,7 @@ class StoryResultScreen extends StatefulWidget {
   final String? storyId;
   final String? theme;
   final String? characterId;
+  final SavedStory? savedStory; // Full story object for series info
 
   const StoryResultScreen({
     super.key,
@@ -31,6 +36,7 @@ class StoryResultScreen extends StatefulWidget {
     this.storyId,
     this.theme,
     this.characterId,
+    this.savedStory,
   });
 
   @override
@@ -417,15 +423,43 @@ class _StoryResultScreenState extends State<StoryResultScreen> {
                     color: Colors.black87,
                   ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
 
-            // Use a larger, more readable font for the story
-            Text(
-              widget.storyText,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+            // Series information if part of a series
+            if (widget.savedStory?.isPartOfSeries ?? false)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.purple.shade100,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.purple.shade300),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.auto_stories, color: Colors.purple.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${widget.savedStory!.seriesTitle} - Chapter ${widget.savedStory!.chapterNumber}',
+                      style: TextStyle(
+                        color: Colors.purple.shade700,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (widget.savedStory?.isPartOfSeries ?? false) const SizedBox(height: 12),
+
+            // Story text with word learning feature
+            TappableStoryCard(
+              text: widget.storyText,
+              textStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     fontSize: 18,
                     height: 1.5,
                   ),
+              backgroundColor: Colors.blue.shade50,
             ),
             const SizedBox(height: 32),
             
@@ -449,6 +483,28 @@ class _StoryResultScreenState extends State<StoryResultScreen> {
                 ),
               ),
             if (widget.wisdomGem.isNotEmpty) const SizedBox(height: 24),
+
+            // CONTINUE ADVENTURE BUTTON
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: _continueAdventure,
+                icon: const Icon(Icons.auto_stories, size: 28),
+                label: Text(
+                  widget.savedStory?.isPartOfSeries == true
+                      ? 'Continue to Next Chapter'
+                      : 'Start a Series!',
+                  style: const TextStyle(fontSize: 18),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber.shade700,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
 
             // Favorite button if story is saved
             if (widget.storyId != null && !_isLoading)

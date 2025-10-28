@@ -83,6 +83,13 @@ class SavedStory {
   final bool isFavorite;
   final String? wisdomGem;
 
+  // Series/Chapter support
+  final String? seriesId;
+  final String? seriesTitle;
+  final int? chapterNumber;
+  final String? previousStoryId;
+  final String? nextStoryId;
+
   SavedStory({
     String? id,
     required this.title,
@@ -93,6 +100,11 @@ class SavedStory {
     this.isInteractive = false,
     this.isFavorite = false,
     this.wisdomGem,
+    this.seriesId,
+    this.seriesTitle,
+    this.chapterNumber,
+    this.previousStoryId,
+    this.nextStoryId,
   }) : id = id ?? DateTime.now().millisecondsSinceEpoch.toString();
 
   factory SavedStory.fromJson(Map<String, dynamic> json) {
@@ -109,6 +121,11 @@ class SavedStory {
       isInteractive: json['is_interactive'] ?? false,
       isFavorite: json['is_favorite'] ?? false,
       wisdomGem: json['wisdom_gem'],
+      seriesId: json['series_id'],
+      seriesTitle: json['series_title'],
+      chapterNumber: json['chapter_number'],
+      previousStoryId: json['previous_story_id'],
+      nextStoryId: json['next_story_id'],
     );
   }
 
@@ -122,6 +139,11 @@ class SavedStory {
         'is_interactive': isInteractive,
         'is_favorite': isFavorite,
         'wisdom_gem': wisdomGem,
+        if (seriesId != null) 'series_id': seriesId,
+        if (seriesTitle != null) 'series_title': seriesTitle,
+        if (chapterNumber != null) 'chapter_number': chapterNumber,
+        if (previousStoryId != null) 'previous_story_id': previousStoryId,
+        if (nextStoryId != null) 'next_story_id': nextStoryId,
       };
 
   SavedStory copyWith({
@@ -134,6 +156,11 @@ class SavedStory {
     bool? isInteractive,
     bool? isFavorite,
     String? wisdomGem,
+    String? seriesId,
+    String? seriesTitle,
+    int? chapterNumber,
+    String? previousStoryId,
+    String? nextStoryId,
   }) {
     return SavedStory(
       id: id ?? this.id,
@@ -145,8 +172,22 @@ class SavedStory {
       isInteractive: isInteractive ?? this.isInteractive,
       isFavorite: isFavorite ?? this.isFavorite,
       wisdomGem: wisdomGem ?? this.wisdomGem,
+      seriesId: seriesId ?? this.seriesId,
+      seriesTitle: seriesTitle ?? this.seriesTitle,
+      chapterNumber: chapterNumber ?? this.chapterNumber,
+      previousStoryId: previousStoryId ?? this.previousStoryId,
+      nextStoryId: nextStoryId ?? this.nextStoryId,
     );
   }
+
+  // Helper methods for series
+  bool get isPartOfSeries => seriesId != null;
+  bool get hasNextChapter => nextStoryId != null;
+  bool get hasPreviousChapter => previousStoryId != null;
+  String get displayTitle => chapterNumber != null
+      ? '$seriesTitle - Chapter $chapterNumber'
+      : title;
+}
 }
 
 // ---------------------

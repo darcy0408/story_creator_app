@@ -328,6 +328,103 @@ def generate_story_endpoint():
         "used_user_key": using_user_key  # Let client know which mode was used
     }), 200
 
+@app.route("/continue-story", methods=["POST"])
+def continue_story_endpoint():
+    """Generate a continuation of a previous story"""
+    payload = request.get_json(silent=True) or {}
+
+    # Required fields
+    character = payload.get("character", "a brave adventurer")
+    theme = payload.get("theme", "Adventure")
+    previous_story = payload.get("previous_story", "")
+    previous_title = payload.get("previous_title", "")
+    chapter_number = payload.get("chapter_number", 2)
+    series_title = payload.get("series_title", "")
+
+    # Optional fields
+    companion = payload.get("companion")
+    therapeutic_prompt = payload.get("therapeutic_prompt", "")
+    user_api_key = payload.get("user_api_key")
+    character_age = payload.get("character_age", 7)
+
+    # Build continuation prompt
+    continuation_prompt = f"""You are an expert children's story writer creating Chapter {chapter_number} of a story series.
+
+SERIES INFORMATION:
+Series Title: {series_title}
+Previous Chapter Title: {previous_title}
+Main Character: {character}
+Theme: {theme}
+{f"Companion: {companion}" if companion else ""}
+
+PREVIOUS CHAPTER SUMMARY:
+{previous_story[:1500]}
+
+TASK:
+Write Chapter {chapter_number} that continues this adventure naturally. The story should:
+1. Reference events from the previous chapter
+2. Advance the plot with new challenges or discoveries
+3. Maintain character consistency and development
+4. Be age-appropriate for {character_age} year olds
+5. Include exciting new elements while building on what came before
+6. End with a natural conclusion (not a cliffhanger, but leaves room for more adventures)
+
+{f"THERAPEUTIC FOCUS: {therapeutic_prompt}" if therapeutic_prompt else ""}
+
+FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
+[TITLE: An engaging chapter title]
+
+[Your 8-10 paragraph story goes here - make it exciting, age-appropriate, and full of vivid details that children will love]
+
+[WISDOM GEM: A meaningful lesson from this chapter]
+
+Make this chapter feel like a natural continuation while being exciting on its own!"""
+
+    # Generate the story
+    using_user_key = False
+    try:
+        if user_api_key:
+            genai.configure(api_key=user_api_key)
+            user_model = genai.GenerativeModel(GEMINI_MODEL)
+            response = user_model.generate_content(continuation_prompt)
+            using_user_key = True
+        else:
+            if model is None:
+                raise RuntimeError("Model unavailable")
+            response = model.generate_content(continuation_prompt)
+            using_user_key = False
+
+        raw_text = getattr(response, "text", "")
+        if not raw_text:
+            raise ValueError("Empty model response")
+
+    except Exception as e:
+        logger.warning("Model error in continuation, using fallback: %s", e)
+        raw_text = (
+            f"[TITLE: {series_title} - Chapter {chapter_number}]\n"
+            f"The adventure continues for {character}! After the exciting events of the previous chapter, "
+            f"our hero discovers new surprises and learns even more about courage and friendship.\n"
+            f"[WISDOM GEM: {WisdomGems.get_wisdom(theme)}]"
+        )
+    finally:
+        if user_api_key and api_key:
+            genai.configure(api_key=api_key)
+
+    title, wisdom_gem, story_text = _safe_extract_title_and_gem(raw_text, theme)
+
+    # Add chapter number to title if not already there
+    if f"Chapter {chapter_number}" not in title:
+        title = f"{series_title} - Chapter {chapter_number}: {title}"
+
+    return jsonify({
+        "title": title,
+        "story_text": story_text,
+        "wisdom_gem": wisdom_gem,
+        "chapter_number": chapter_number,
+        "series_title": series_title,
+        "used_user_key": using_user_key
+    }), 200
+
 @app.route("/create-character", methods=["POST"])
 def create_character():
     data = request.get_json(silent=True) or {}

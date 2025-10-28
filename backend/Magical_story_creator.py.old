@@ -244,6 +244,73 @@ def health():
 def get_story_themes():
     return jsonify(["Adventure", "Friendship", "Magic", "Dragons", "Castles", "Unicorns", "Space", "Ocean"]), 200
 
+@app.route("/get-word-definition", methods=["POST"])
+def get_word_definition():
+    """Get kid-friendly definition and pronunciation for a word"""
+    data = request.get_json(silent=True) or {}
+    word = data.get("word", "").strip()
+    context = data.get("context", "").strip()  # The sentence containing the word
+    age = data.get("age", 7)  # Age of the child for appropriate explanation
+
+    if not word:
+        return jsonify({"error": "Word is required"}), 400
+
+    if not model:
+        return jsonify({"error": "AI model not available"}), 503
+
+    try:
+        # Build prompt for kid-friendly definition
+        prompt = f"""
+You are helping a {age}-year-old child learn new words.
+
+Word: "{word}"
+{f'Used in this sentence: "{context}"' if context else ''}
+
+Provide a kid-friendly explanation in JSON format with these fields:
+- "word": the word being defined
+- "simple_definition": A very simple, clear definition using words a {age}-year-old would understand (1-2 sentences max)
+- "example": A simple, fun example sentence using the word (different from the original context)
+- "synonyms": 2-3 simpler words that mean almost the same thing (optional, only if helpful)
+
+Make it fun, clear, and easy to understand. Use simple language.
+
+Return ONLY valid JSON, no other text.
+""".strip()
+
+        response = model.generate_content(prompt)
+        result_text = response.text.strip()
+
+        # Try to parse JSON from response
+        import json
+        # Remove markdown code blocks if present
+        if result_text.startswith("```"):
+            result_text = result_text.split("```")[1]
+            if result_text.startswith("json"):
+                result_text = result_text[4:]
+        result_text = result_text.strip()
+
+        definition_data = json.loads(result_text)
+
+        # Add pronunciation hint (simplified syllable breakdown)
+        # This could be enhanced with actual phonetic API
+        syllables = word.lower()
+        definition_data["pronunciation_hint"] = syllables
+
+        return jsonify(definition_data), 200
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse definition JSON: {e}, response: {result_text}")
+        # Fallback: return simple response
+        return jsonify({
+            "word": word,
+            "simple_definition": f"Let me help you understand '{word}'! It's a word used in stories.",
+            "example": f"You can use '{word}' when telling stories.",
+            "error": "Could not parse full definition"
+        }), 200
+    except Exception as e:
+        logger.exception(f"Error getting word definition: {e}")
+        return jsonify({"error": f"Failed to get definition: {str(e)}"}), 500
+
 @app.route("/generate-story", methods=["POST"])
 def generate_story_endpoint():
     payload = request.get_json(silent=True) or {}

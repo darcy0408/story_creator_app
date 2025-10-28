@@ -89,8 +89,40 @@ backend/characters.db
 # Ignore local tooling folder (if it's not source code)
 backend/python/
 
+# =======================
+# Backup and Alternative Versions
+# =======================
+*.backup
+*_enhanced.dart
+*_gemini.dart.backup
+lib/*_with_portraits.dart
 
+# =======================
+# Temporary Test Files
+# =======================
+test_gemini.py
+fix_backend_model.py
+list_gemini_models.py
+activate_tester_now.dart
+rebuild_app.bat
 
+# =======================
+# Node Modules
+# =======================
+node_modules/
+package-lock.json
+package.json
+web_app/
 
+# =======================
+# IDE Specific
+# =======================
+.claude/
+.github/copilot-instructions.md
+
+# =======================
+# Temporary Office Files
+# =======================
+~$*.md
 
 
